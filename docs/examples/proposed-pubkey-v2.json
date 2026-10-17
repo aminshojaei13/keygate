@@ -1,0 +1,29 @@
+{
+  "success": true,
+  "data": {
+    "algorithm": "ed25519",
+    "public_key": "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29",
+    "format": "hex",
+    "keys": [
+      {
+        "kid": "ksk_2026_10",
+        "algorithm": "ed25519",
+        "public_key": "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29",
+        "format": "hex",
+        "status": "active"
+      },
+      {
+        "kid": "ksk_2026_04",
+        "algorithm": "ed25519",
+        "status": "retired"
+      }
+    ],
+    "protocol": {
+      "version": 1,
+      "token_format": "legacy-ed25519",
+      "revocations": true,
+      "kids": true,
+      "challenge": false
+    }
+  }
+}

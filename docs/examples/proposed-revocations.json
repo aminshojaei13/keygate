@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "data": {
+    "rev": 17,
+    "generated_at": "2026-10-17T09:00:00Z",
+    "algorithm": "ed25519",
+    "entries": [
+      {
+        "key_hash": "9f86d081884c7d65a93ef7bf47c0ef2b7aef6e3c8a5e6a8a6b7a1d8e9f0a1b2c",
+        "reason": "revoked",
+        "revoked_at": "2026-10-16T12:00:00Z"
+      }
+    ],
+    "token": "<base64url-canonical-payload>.<base64url-ed25519-signature>"
+  }
+}

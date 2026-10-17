@@ -1,0 +1,606 @@
+# OpenAPI proposal (draft) — additive extension of docs/openapi.yaml (v1.2.0 → v1.3.0)
+#
+# STATUS: PROPOSAL ONLY. This file documents designs that are NOT implemented.
+# It does not replace docs/openapi.yaml (the served spec); merging it is an
+# implementation-phase task gated by docs/api-design.md §11's checklist.
+#
+# What it proposes:
+#   1. /license/pubkey  — additive response fields (keys[], protocol block)   [§8]
+#   2. /license/revocations — NEW signed offline revocation list              [§7.2]
+#   3. /license/activations  — NEW optional SDK device-inspection read        [§4]
+#   4. /admin/licenses/{id}/transfer — NEW authorized admin transfer          [§6.1]
+#   5. /portal/licenses/{license_key}/transfer + /transfer/confirm — NEW two-step customer transfer [§6.2]
+#   6. /releases/{product_slug}/signing-key — NEW public artifact-key discovery [§9]
+#   7. Reused (EXISTING, unchanged) reference schemas for activate/verify/deactivate
+#      so this file is self-contained for review; the merge keeps ONE copy.
+#
+# Everything below is additive: unknown paths/fields never affect existing clients.
+openapi: 3.1.0
+info:
+  title: Keygate API — proposed additions
+  version: 1.3.0-proposed
+  description: |
+    Additive proposal on top of docs/openapi.yaml (1.2.0). Base server URL and
+    envelope conventions are identical to the current spec: snake_case, RFC 3339
+    UTC *_at fields, {success,data}|{success,error} envelope, one HTTP status per
+    error code. PROPOSED operationIds and schemas are prefixed Prop*.
+servers:
+  - url: "{server}/api/v1"
+    variables:
+      server:
+        default: http://localhost:9000
+        description: Your Keygate server URL
+security: []
+
+tags:
+  - name: License
+    description: License lifecycle used by client applications (any language)
+  - name: Transfer
+    description: PROPOSED — authorized license ownership transfer
+  - name: Releases
+    description: Update feeds and artifact verification material
+
+paths:
+  /license/pubkey:
+    get:
+      tags: [License]
+      summary: Verification-key discovery (extension of the existing route)
+      description: |
+        EXISTING ROUTE. Today returns {algorithm, public_key, format}.
+        PROPOSED additive fields: keys[] (for kid-based rotation) and a
+        protocol capability block. Old clients keep reading
+        data.public_key / data.algorithm — both remain first-class.
+      responses:
+        "200":
+          description: Current key + (proposed) key list and capability block
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              example: public, max-age=3600
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PubKeyResponseV2" }
+              example:
+                success: true
+                data:
+                  algorithm: ed25519
+                  public_key: 3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29
+                  format: hex
+                  keys:
+                    - { kid: ksk_2026_10, algorithm: ed25519, public_key: 3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29, format: hex, status: active }
+                    - { kid: ksk_2026_04, algorithm: ed25519, status: retired }
+                  protocol:
+                    version: 1
+                    token_format: legacy-ed25519
+                    revocations: true
+                    kids: true
+                    challenge: false
+
+  /license/revocations:
+    get:
+      tags: [License]
+      summary: "PROPOSED: signed offline revocation list"
+      description: |
+        Closes audit finding S1 (offline revocation latency): a client that can
+        reach the server at all — even briefly — learns which license keys are
+        revoked, independent of its token exp. Entries are SHA-256 key digests,
+        so the list leaks no identities (keys are 160-bit). The `token` field
+        reuses the existing two-part Ed25519 envelope, signed over the payload's
+        transported bytes (see docs/cryptographic-design.md §5).
+
+        Client policy: fetch at least every exp/2, persist {rev, entries},
+        enforce rev monotonicity (an older rev than last-seen = rollback attempt).
+      operationId: listRevocations
+      parameters:
+        - name: product
+          in: query
+          required: false
+          description: Optional product scope (server may ignore and return all)
+          schema: { type: string }
+      responses:
+        "200":
+          description: Signed revocation list
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              example: max-age=120
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PropRevocationsResponse" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+      idempotency: read-only (Idempotency-Key ignored)
+      x-rate-limit: license bucket if authenticated scope applied; otherwise public feed-style
+      x-audit: none (derives from licenses.status)
+
+  /license/activations:
+    post:
+      tags: [License]
+      summary: "PROPOSED (optional): list this license's device activations from a client"
+      description: |
+        Optional SDK read variant of the portal inspection. license_key is the
+        credential; hides ip_address (privacy: portal/admin only). Unknown key
+        answers 404 LICENSE_NOT_FOUND — same anti-enumeration collapse as every
+        public SDK route. Ship only if product flag enables it (see
+        docs/api-design.md §4 decision record).
+      operationId: listActivationsSDK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key]
+              properties:
+                license_key: { type: string, example: "KG-ABCD2345-EFGH6789-IJKL1234-MNOP5678" }
+      responses:
+        "200":
+          description: Current device records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      current:  { type: integer, example: 1 }
+                      max:      { type: integer, example: 3 }
+                      activations:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            identifier:      { type: string, example: "550e8400-e29b-41d4-a716-446655440000" }
+                            identifier_type: { type: string, enum: [device, user] }
+                            label:           { type: string }
+                            created_at:      { type: string, format: date-time }
+                            last_verified:   { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/LicenseNotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+      idempotency: natural (read-only)
+      x-audit: none (metrics only)
+
+  /admin/licenses/{id}/transfer:
+    post:
+      tags: [Transfer]
+      summary: "PROPOSED: authorized admin/server-to-server license transfer"
+      description: |
+        Scope: admin session or API key with scope `admin` | `licenses:write`;
+        product-bound keys enforced (403 PRODUCT_SCOPE_MISMATCH) via the existing
+        checkLicenseScope helper. Reuses apperr.ValidateEmail. Releases activations
+        by default so the new owner starts clean (mirrors revoke's cleanup).
+        Webhook event license.transferred (NEW — receivers must ignore unknown events).
+      operationId: transferLicense
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_email]
+              properties:
+                new_email: { type: string, format: email }
+                release_activations: { type: boolean, default: true }
+                reason: { type: string, maxLength: 256 }
+      responses:
+        "200":
+          description: Transferred
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, example: transferred }
+                      license_id: { type: string }
+                      email: { type: string, example: new-owner@example.com }
+                      activations_released: { type: integer, example: 2 }
+        "400": { $ref: "#/components/responses/BadRequest" }        # BAD_REQUEST | INVALID_INPUT*
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }         # FORBIDDEN | INSUFFICIENT_SCOPE | PRODUCT_SCOPE_MISMATCH
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "IDENTICAL_EMAIL*"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+      x-idempotency: repeat = success or 409 IDENTICAL_EMAIL (state-idempotent); Idempotency-Key wrapper deferred
+      x-audit:
+        - { entity: license, action: email_transferred, actor: caller, includes_ip: true }
+      x-error-codes-new: [INVALID_INPUT, IDENTICAL_EMAIL]   # * marked new; existing codes keep their status mapping
+
+  /portal/licenses/{license_key}/transfer:
+    post:
+      tags: [Transfer]
+      summary: "PROPOSED: customer-initiated transfer (step 1 of 2)"
+      description: |
+        Owner-only (accepted seats excluded). Step 1 stores a SHA-256 hashed
+        confirmation token — same trust machinery as seat invites — and mails
+        confirmations to BOTH mailboxes. Step 2 is POST /transfer/confirm.
+      operationId: requestTransfer
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: license_key
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_email]
+              properties:
+                new_email: { type: string, format: email }
+      responses:
+        "200":
+          description: Pending confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, example: pending }
+                      expires_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }   # not yours and unknown key are identical
+        "409": { description: "TRANSFER_PENDING*" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+      x-audit: [{ entity: license, action: transfer_requested, actor: portal }]
+
+  /transfer/confirm:
+    post:
+      tags: [Transfer]
+      summary: "PROPOSED: confirm transfer (step 2 of 2, public + token)"
+      description: |
+        Plain token = proof of mailbox ownership (same model as /invites/accept).
+        Token consumed atomically; rate-limited 60/min/IP like invites; invalid,
+        expired or reused tokens answer 404 NOT_FOUND (no oracle). Issues a
+        session for the new owner on success, mirroring AcceptInvite.
+      operationId: confirmTransfer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, minLength: 64, maxLength: 64, description: 64-char hex token from the confirmation email }
+      responses:
+        "200":
+          description: Transferred and signed in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, example: transferred }
+                      license_id: { type: string }
+                      email: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+      x-audit: [{ entity: license, action: transferred, actor: portal }]
+
+  /releases/{product_slug}/signing-key:
+    get:
+      tags: [Releases]
+      summary: "PROPOSED: public artifact-verification key discovery"
+      description: |
+        Public keys are public: today's equivalent downloads are admin-scoped
+        (/admin/products/{id}/signing-key[/tauri-pubkey]). This route lets an
+        installed updater follow key rotation without a binary update. It never
+        signs anything client-side and changes no verification semantics.
+      operationId: getReleaseSigningKeys
+      parameters:
+        - $ref: "#/components/parameters/ProductSlug"
+      responses:
+        "200":
+          description: Active (+retired) artifact keys for the product
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      keys:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            kid:            { type: string, example: "psk_2026_10" }
+                            algorithm:      { type: string, enum: [ed25519] }
+                            public_key_pem: { type: string, description: "SPKI-less 'ED25519 PUBLIC KEY' PEM (Sparkle convention)" }
+                            public_key_b64: { type: string, description: "raw 32-byte key, std base64" }
+                            tauri_pubkey:   { type: string, description: "base64('Ed' + 8-byte key id + 32-byte key)" }
+                            status:         { type: string, enum: [active, retired] }
+        "404": { $ref: "#/components/responses/NotFound" }   # no active key
+      x-audit: none
+
+  # ─── Existing routes referenced for self-containment (schemas unchanged) ───
+  /license/activate:
+    post:
+      tags: [License]
+      summary: Activate a license (EXISTING — unchanged)
+      operationId: activate
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 256 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ActivateRequest" }
+      responses:
+        "200":
+          description: activated or already_activated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivateResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { description: "License lifecycle refusal: LICENSE_EXPIRED | LICENSE_CANCELED | LICENSE_SUSPENDED | LICENSE_REVOKED | LICENSE_INVALID" , content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { description: "LICENSE_NOT_FOUND (unknown key / product mismatch) | FEATURE_NOT_AVAILABLE (product type gate)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "ACTIVATION_LIMIT with details {max,current} | IDEMPOTENCY_IN_FLIGHT (Retry-After: 1)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "413": { description: "BODY_TOO_LARGE over 256 KiB (idempotency layer)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "IDEMPOTENCY_KEY_CONFLICT (same key, different body)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }  # LOCKED_OUT {retry_after} | RATE_LIMITED
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /license/verify:
+    post:
+      tags: [License]
+      summary: Verify a license and issue an offline token (EXISTING — unchanged)
+      operationId: verify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, identifier]
+              properties:
+                license_key: { type: string }
+                identifier:  { type: string, maxLength: 256 }
+      responses:
+        "200":
+          description: |
+            License state + signed token. Anti-enumeration: every
+            license-knowable failure (unknown, other product, suspended,
+            revoked, expired, not-activated) is 404 LICENSE_NOT_FOUND.
+            Verify never returns 403.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerifyResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: "LICENSE_NOT_FOUND | FEATURE_NOT_AVAILABLE", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+      x-audit: "none (metrics only: LicenseVerifications)"
+
+  /license/deactivate:
+    post:
+      tags: [License]
+      summary: Release this identifier's activation slot (EXISTING — unchanged)
+      operationId: deactivate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, identifier]
+              properties:
+                license_key: { type: string }
+                identifier:  { type: string, maxLength: 256 }
+      responses:
+        "200":
+          description: deactivated (second call answers 404 — treat as already free)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, example: deactivated }
+        "404": { description: "LICENSE_NOT_FOUND (also for unknown identifier) | FEATURE_NOT_AVAILABLE", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+      x-audit: [{ entity: license, action: deactivated, actor: sdk }]
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin/API key: kg_live_… (scopes admin | licenses:write | releases:write)"
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+
+  parameters:
+    ProductSlug:
+      name: product_slug
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: BAD_REQUEST — malformed body or fields
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthorized:
+      description: UNAUTHORIZED — missing/invalid session or credentials
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: FORBIDDEN | INSUFFICIENT_SCOPE | PRODUCT_SCOPE_MISMATCH — authorization refused
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: NOT_FOUND — resource unknown or not accessible to this caller
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    LicenseNotFound:
+      description: LICENSE_NOT_FOUND — unknown key or any license-knowable failure (collapsed on purpose)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RateLimited:
+      description: "RATE_LIMITED | LOCKED_OUT {details.retry_after} — back off; Retry-After header set when applicable"
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Internal:
+      description: INTERNAL_ERROR — opaque 500, safe to retry once
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  schemas:
+    Error:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: LICENSE_NOT_FOUND }
+            message: { type: string, example: license not found }
+            details: { type: object, nullable: true }
+
+    ActivateRequest:
+      type: object
+      required: [license_key, identifier]
+      properties:
+        license_key: { type: string, example: "KG-ABCD2345-EFGH6789-IJKL1234-MNOP5678" }
+        identifier:
+          type: string
+          maxLength: 256
+          description: "Today: free-form (trim, ≤256). PROPOSED canonical profile: UUIDv4/UUIDv7 or sha256:<64 hex> for NEW activations; legacy rows grandfathered."
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        identifier_type: { type: string, enum: [device, user], default: device }
+        label: { type: string, maxLength: 256, example: "Workstation" }
+
+    TokenClaims:
+      type: object
+      description: |
+        Payload of the two-part offline token (unix seconds). Verification
+        procedure: docs/cryptographic-design.md §3 — Ed25519 verifies the
+        segment-0 string bytes; claims are read only after the signature passes.
+      properties:
+        lid:  { type: string, description: license id }
+        pid:  { type: string, description: product id }
+        pln:  { type: string, description: plan id }
+        sts:  { type: string, enum: [active, trialing, past_due, canceled, expired, suspended, revoked] }
+        did:  { type: string, description: identifier this token was issued for }
+        fpr:  { type: string, description: "hex(sha256(did + ':' + pid)[0:8])" }
+        ftr:  { type: object, description: feature entitlements }
+        iat:  { type: integer }
+        exp:  { type: integer, description: offline window end (check-in interval) }
+        vun:  { type: integer, description: license term end; absent = perpetual }
+        upd:  { type: integer, description: maintenance-period end; absent = none }
+        grc:  { type: integer, description: grace days after vun }
+        nce:  { type: string, description: per-issuance nonce }
+
+    ActivateResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            status: { type: string, enum: [activated, already_activated] }
+            license_id: { type: string }
+            token: { type: string, description: "<base64url(payload).base64url(ed25519_sig)>" }
+            meta: { type: object, additionalProperties: true }
+
+    VerifyResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            status: { type: string, enum: [active, trialing, past_due, canceled, expired, suspended, revoked] }
+            plan_id: { type: string }
+            plan_name: { type: string }
+            valid_until: { type: string, format: date-time, nullable: true }
+            updates_until: { type: string, format: date-time, nullable: true }
+            features: { type: object, additionalProperties: true }
+            token: { type: string }
+            grace_days: { type: integer }
+            meta: { type: object, additionalProperties: true }
+            external_customer_id: { type: string }
+            external_workspace_id: { type: string }
+
+    PubKeyResponseV2:
+      type: object
+      description: Existing fields (algorithm, public_key, format) + PROPOSED keys[]/protocol.
+      properties:
+        algorithm: { type: string, enum: [ed25519] }
+        public_key: { type: string, description: hex-encoded raw 32-byte key }  # legacy scalar — kept
+        format: { type: string, enum: [hex] }
+        keys:
+          type: array
+          items:
+            type: object
+            properties:
+              kid: { type: string, example: ksk_2026_10 }
+              algorithm: { type: string, enum: [ed25519] }
+              public_key: { type: string }
+              format: { type: string, enum: [hex] }
+              status: { type: string, enum: [active, retired] }
+        protocol:
+          type: object
+          description: Capability discovery (fields absent on old servers = feature absent)
+          properties:
+            version: { type: integer, example: 1 }
+            token_format: { type: string, enum: [legacy-ed25519, jws-eddsa] }
+            revocations: { type: boolean }
+            kids: { type: boolean }
+            challenge: { type: boolean }
+
+    PropRevocationsResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            rev: { type: integer, example: 17, description: monotonic counter; rollback protection }
+            generated_at: { type: string, format: date-time }
+            algorithm: { type: string, enum: [ed25519] }
+            entries:
+              type: array
+              items:
+                type: object
+                properties:
+                  key_hash: { type: string, description: "hex(sha256(UPPER(TRIM(license_key))))" }
+                  reason: { type: string, enum: [revoked, suspended, refunded] }
+                  revoked_at: { type: string, format: date-time }
+            token: { type: string, description: two-part Ed25519 envelope over the rendered payload }

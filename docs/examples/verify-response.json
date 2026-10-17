@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "data": {
+    "status": "active",
+    "plan_id": "pln_01HQ8Z9XYZ",
+    "plan_name": "Pro",
+    "valid_until": "2026-11-14T00:00:00Z",
+    "updates_until": "2026-11-30T00:00:00Z",
+    "features": {
+      "export": true,
+      "seats": "5"
+    },
+    "token": "eyJsaWQiOiJsaWNfMDFIUThaM001SyIsInBpZCI6InByZF8wMUhROFoxMkFCIiwicGxuIjoicGxuXzAxSFE4WjlYWVoiLCJzdHMiOiJhY3RpdmUiLCJkaWQiOiI1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDAiLCJmdHIiOnsiZXhwb3J0Ijp0cnVlLCJzZWF0cyI6IjUifSwiaWF0IjoxNzk1MDAwMDAwLCJleHAiOjE3OTU2MDQ4MDAsInZ1biI6MTgwMDAwMDAwMCwidXBkIjoxNzk4NjA4MDAwLCJncmMiOjcsIm5jZSI6ImRHaHBjeTFwY3kxaExXNXZibU5sIiwiZnByIjoiOWY4NmQwODE4ODRjN2Q2NSJ9.u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7uw",
+    "grace_days": 7,
+    "meta": {
+      "server": "Keygate",
+      "url": "https://keygate.app"
+    },
+    "external_customer_id": "cus_42",
+    "external_workspace_id": "ws_9"
+  }
+}
