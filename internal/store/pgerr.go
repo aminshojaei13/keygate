@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/uptrace/bun/driver/pgdriver"
 )
@@ -23,3 +24,20 @@ func isUniqueViolation(err error) bool {
 	}
 	return false
 }
+
+// isUniqueViolationNamed reports whether err is a Postgres unique_violation
+// (SQLSTATE 23505) raised by an index or constraint whose name contains name.
+func isUniqueViolationNamed(err error, name string) bool {
+	if !isUniqueViolation(err) {
+		return false
+	}
+	if name == "" {
+		return true
+	}
+	var pgErr pgdriver.Error
+	if errors.As(err, &pgErr) {
+		return strings.Contains(pgErr.Field('n'), name) || strings.Contains(err.Error(), name)
+	}
+	return strings.Contains(err.Error(), name)
+}
+

@@ -38,6 +38,14 @@ func (h *LicenseHandler) Activate(c *gin.Context) {
 		response.BadRequest(c, "identifier too long")
 		return
 	}
+	if req.IdentifierType != "" && req.IdentifierType != "device" && req.IdentifierType != "user" {
+		response.BadRequest(c, "invalid identifier_type, must be device or user")
+		return
+	}
+	if len(req.Label) > maxIdentifierLen {
+		response.BadRequest(c, "label too long")
+		return
+	}
 
 	productID, _ := c.Get("product_id")
 	result, err := h.svc.Activate(c.Request.Context(), service.ActivateInput{

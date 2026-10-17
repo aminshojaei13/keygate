@@ -1191,6 +1191,10 @@ func main() {
 		licWrite.DELETE("/licenses/:id/addons/:addon_id", adminH.RemoveLicenseAddon)
 		licWrite.GET("/licenses/:id/floating", adminH.ListFloatingSessions)
 
+		licWrite.POST("/licenses/:id/transfer", adminH.TransferLicense)
+
+		licWrite.POST("/activations/:id/deactivate", adminH.DeactivateActivation)
+		licWrite.POST("/activations/:id/reactivate", adminH.ReactivateActivation)
 		licWrite.DELETE("/activations/:id", adminH.DeleteActivation)
 
 		admin.GET("/api-keys", adminH.ListAPIKeys)

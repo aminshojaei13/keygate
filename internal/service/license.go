@@ -108,6 +108,11 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 	}
 
 	if err := s.assertUsable(lic); err != nil {
+		s.store.Audit(ctx, &model.AuditLog{
+			Entity: "license", EntityID: lic.ID, Action: "activation_failed",
+			ActorType: "sdk", IPAddress: in.IPAddress,
+			Changes: map[string]any{"identifier": in.Identifier, "reason": err.Error()},
+		})
 		return nil, err
 	}
 
@@ -127,9 +132,13 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 
 	max := s.maxActivations(lic)
 	act := &model.Activation{
-		LicenseID: lic.ID, Identifier: in.Identifier,
-		IdentifierType: in.IdentifierType, Label: in.Label,
-		IPAddress: in.IPAddress,
+		LicenseID:      lic.ID,
+		Identifier:     in.Identifier,
+		IdentifierType: in.IdentifierType,
+		Scheme:         model.DetectIdentifierScheme(in.Identifier),
+		Status:         model.ActivationActive,
+		Label:          in.Label,
+		IPAddress:      in.IPAddress,
 	}
 	if err := s.store.ActivateWithinLimit(ctx, act, max); err != nil {
 		// The machine already held a slot. The read above missed it
@@ -149,9 +158,14 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 				Meta:  responseMeta(),
 			}, nil
 		}
-		if err.Error() == "activation limit reached" {
+		if errors.Is(err, store.ErrActivationLimit) || err.Error() == "activation limit reached" {
 			middleware.LicenseActivations.WithLabelValues(lic.ProductID, "failed").Inc()
 			count, _ := s.store.CountActivations(ctx, lic.ID)
+			s.store.Audit(ctx, &model.AuditLog{
+				Entity: "license", EntityID: lic.ID, Action: "activation_failed",
+				ActorType: "sdk", IPAddress: in.IPAddress,
+				Changes: map[string]any{"identifier": in.Identifier, "reason": "activation_limit_reached"},
+			})
 			return nil, apperr.WithDetails(
 				apperr.Conflict("ACTIVATION_LIMIT", "maximum activations reached"),
 				map[string]any{"max": max, "current": count},
@@ -383,7 +397,7 @@ func (s *LicenseService) Deactivate(ctx context.Context, in DeactivateInput) err
 		return licenseNotFound()
 	}
 
-	if err := s.store.DeleteActivation(ctx, act.ID); err != nil {
+	if _, err := s.store.SoftDeactivateActivation(ctx, act.ID, "client"); err != nil {
 		return apperr.Internal(err)
 	}
 
@@ -394,7 +408,7 @@ func (s *LicenseService) Deactivate(ctx context.Context, in DeactivateInput) err
 	s.store.Audit(ctx, &model.AuditLog{
 		Entity: "license", EntityID: lic.ID, Action: "deactivated",
 		ActorType: "sdk", IPAddress: in.IPAddress,
-		Changes: map[string]any{"identifier": in.Identifier},
+		Changes: map[string]any{"identifier": in.Identifier, "reason": "client"},
 	})
 
 	s.logger.Info("license deactivated", "license_id", lic.ID, "identifier", in.Identifier)

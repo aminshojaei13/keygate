@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -403,7 +404,13 @@ func (s *Store) FindLicenseByIDWithCounts(ctx context.Context, id string) (*mode
 	if err != nil {
 		return nil, err
 	}
-	l.ActivationCount = len(l.Activations)
+	activeCount := 0
+	for _, a := range l.Activations {
+		if a.Status == model.ActivationActive {
+			activeCount++
+		}
+	}
+	l.ActivationCount = activeCount
 	if l.Plan != nil && l.Plan.LicenseModel == "floating" {
 		n, err := s.CountActiveFloating(ctx, l.ID)
 		if err != nil {
@@ -733,6 +740,103 @@ func (s *Store) ListUsers(ctx context.Context, search string, offset, limit int)
 func (s *Store) DeleteActivationByID(ctx context.Context, id string) error {
 	_, err := s.DB.NewDelete().Model((*model.Activation)(nil)).Where("id = ?", id).Exec(ctx)
 	return err
+}
+
+// ErrIdenticalEmail reports that the transfer target email matches the current email.
+var ErrIdenticalEmail = errors.New("new email is identical to current email")
+
+// TransferLicense transfers a license to a new email address.
+// If releaseActivations is true, it deactivates all active device activations on the license.
+// Serializes under the license row lock.
+func (s *Store) TransferLicense(ctx context.Context, licenseID, newEmail string, releaseActivations bool) (int, error) {
+	var releasedCount int
+	err := s.RunInTx(ctx, func(txCtx context.Context, tx bun.Tx) error {
+		var lic model.License
+		err := tx.NewRaw("SELECT id, email, product_id, status FROM licenses WHERE id = ? FOR UPDATE", licenseID).Scan(txCtx, &lic)
+		if err != nil {
+			return err
+		}
+		if strings.EqualFold(lic.Email, newEmail) {
+			return ErrIdenticalEmail
+		}
+		if releaseActivations {
+			res, err := tx.NewUpdate().Model((*model.Activation)(nil)).
+				Set("status = ?, deactivated_at = now(), deactivated_reason = ?", model.ActivationDeactivated, "transfer").
+				Where("license_id = ? AND status = ?", licenseID, model.ActivationActive).
+				Exec(txCtx)
+			if err != nil {
+				return err
+			}
+			n, _ := res.RowsAffected()
+			releasedCount = int(n)
+		}
+		_, err = tx.NewUpdate().Model((*model.License)(nil)).
+			Set("email = ?, user_id = NULL, updated_at = now()", newEmail).
+			Where("id = ?", licenseID).
+			Exec(txCtx)
+		return err
+	})
+	return releasedCount, err
+}
+
+// ReactivateActivation reactivates a deactivated activation slot within the plan's limit.
+// Under the license row lock to serialize with concurrent activations and transfers.
+func (s *Store) ReactivateActivation(ctx context.Context, activationID string) error {
+	return s.RunInTx(ctx, func(txCtx context.Context, tx bun.Tx) error {
+		act := new(model.Activation)
+		err := tx.NewSelect().Model(act).Where("id = ?", activationID).Scan(txCtx)
+		if err != nil {
+			return err
+		}
+		if act.Status == model.ActivationActive {
+			return nil
+		}
+
+		lic := new(model.License)
+		err = tx.NewSelect().Model(lic).
+			Where("id = ?", act.LicenseID).
+			For("UPDATE").
+			Scan(txCtx)
+		if err != nil {
+			return err
+		}
+		if lic.PlanID != "" {
+			plan := new(model.Plan)
+			if err := tx.NewSelect().Model(plan).Where("id = ?", lic.PlanID).Scan(txCtx); err == nil {
+				lic.Plan = plan
+			}
+		}
+
+		if lic.Status == model.StatusRevoked {
+			return errors.New("license is revoked")
+		}
+		if lic.Status == model.StatusSuspended {
+			return errors.New("license is suspended")
+		}
+		if lic.Status == model.StatusExpired {
+			return errors.New("license is expired")
+		}
+
+		maxActivations := 3
+		if lic.Plan != nil && lic.Plan.MaxActivations > 0 {
+			maxActivations = lic.Plan.MaxActivations
+		}
+
+		var count int
+		err = tx.NewRaw("SELECT COUNT(*) FROM activations WHERE license_id = ? AND status = ?", act.LicenseID, model.ActivationActive).Scan(txCtx, &count)
+		if err != nil {
+			return err
+		}
+		if count >= maxActivations {
+			return ErrActivationLimit
+		}
+
+		_, err = tx.NewUpdate().Model((*model.Activation)(nil)).
+			Set("status = ?, deactivated_at = NULL, deactivated_reason = '', last_verified = now()", model.ActivationActive).
+			Where("id = ?", activationID).
+			Exec(txCtx)
+		return err
+	})
 }
 
 // FindActivationByID loads one activation.

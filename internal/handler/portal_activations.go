@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"database/sql"
-	"errors"
 	"strings"
 	"time"
 
@@ -43,6 +41,8 @@ type portalActivationView struct {
 	ID             string    `json:"id"`
 	Identifier     string    `json:"identifier"`
 	IdentifierType string    `json:"identifier_type"`
+	Scheme         string    `json:"scheme,omitempty"`
+	Status         string    `json:"status,omitempty"`
 	Label          string    `json:"label,omitempty"`
 	IPAddress      string    `json:"ip_address,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -105,10 +105,15 @@ func (h *PortalActivationsHandler) List(c *gin.Context) {
 	}
 	out := make([]portalActivationView, 0, len(rows))
 	for _, a := range rows {
+		if a.Status != model.ActivationActive {
+			continue
+		}
 		out = append(out, portalActivationView{
 			ID:             a.ID,
 			Identifier:     a.Identifier,
 			IdentifierType: a.IdentifierType,
+			Scheme:         a.Scheme,
+			Status:         a.Status,
 			Label:          a.Label,
 			IPAddress:      a.IPAddress,
 			CreatedAt:      a.CreatedAt,
@@ -150,20 +155,21 @@ func (h *PortalActivationsHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.store.DeleteActivationByID(c.Request.Context(), activationID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// Race: activation was already gone. Treat as success.
-			response.OK(c, gin.H{"status": "deleted"})
-			return
-		}
+	ok, err = h.store.SoftDeactivateActivation(c.Request.Context(), activationID, "portal")
+	if err != nil {
 		response.Internal(c, err)
+		return
+	}
+	if !ok {
+		// Race or already deactivated: treat as success.
+		response.OK(c, gin.H{"status": "deleted"})
 		return
 	}
 
 	h.store.Audit(c.Request.Context(), &model.AuditLog{
-		Entity: "activation", EntityID: activationID, Action: "deleted",
+		Entity: "activation", EntityID: activationID, Action: "deactivated",
 		ActorType: "portal", ActorID: emailFromContext(c), IPAddress: c.ClientIP(),
-		Changes: map[string]any{"license_id": lic.ID, "via": "self_service"},
+		Changes: map[string]any{"license_id": lic.ID, "identifier": removed.Identifier, "reason": "portal"},
 	})
 	if h.webhook != nil {
 		h.webhook.Dispatch(c.Request.Context(), lic.ProductID, "license.deactivated", map[string]any{
