@@ -92,32 +92,59 @@ A Go server + PostgreSQL + (optional) S3-compatible storage for release artifact
 
 ## Quick Start
 
-### Docker (recommended)
+### Docker Compose (Production Deployment)
 
 ```bash
-# 1. Download
+# 1. Download compose file and environment template
 curl -O https://raw.githubusercontent.com/tabloy/keygate/main/docker-compose.yml
 curl -O https://raw.githubusercontent.com/tabloy/keygate/main/.env.example
 cp .env.example .env
 
-# 2. Set your secrets
-# Edit .env: set JWT_SECRET and LICENSE_SIGNING_KEY (openssl rand -hex 32)
+# 2. Generate required 256-bit cryptographic secrets
+JWT_SECRET=$(openssl rand -hex 32)
+LICENSE_SIGNING_KEY=$(openssl rand -hex 32)
+RELEASE_KEY_ENCRYPTION_KEY=$(openssl rand -hex 32)
+POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9')
 
-# 3. Run
+# 3. Populate .env with generated secrets
+sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=${JWT_SECRET}|" .env
+sed -i.bak "s|^LICENSE_SIGNING_KEY=.*|LICENSE_SIGNING_KEY=${LICENSE_SIGNING_KEY}|" .env
+sed -i.bak "s|^RELEASE_KEY_ENCRYPTION_KEY=.*|RELEASE_KEY_ENCRYPTION_KEY=${RELEASE_KEY_ENCRYPTION_KEY}|" .env
+sed -i.bak "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" .env
+rm -f .env.bak
+
+# 4. Start Keygate and PostgreSQL
 docker compose up -d
+
+# 5. Verify service health
+docker compose ps
+curl -s http://localhost:9000/health
 ```
 
-### From source
+### Local Development Environment
+
+For local hacking, testing, and debugging with live image building:
 
 ```bash
-git clone https://github.com/tabloy/keygate.git
-cd keygate && cp .env.example .env
-make build && ./bin/keygate
+# Start Keygate in development mode (exposes Postgres on 5432)
+make docker-dev
 ```
 
-Open **http://localhost:9000** — the setup wizard guides you from there.
+Open **http://localhost:9000** — the setup wizard guides you through first-run administrative owner creation.
 
-> 📖 Full docs, deployment guides, and SDK examples at **[keygate.app/docs](https://keygate.app/docs)**
+---
+
+## Operational Documentation & Runbooks
+
+For production self-hosting, review the operational guides in the repository:
+
+- 📖 **[Production Installation & Reverse Proxy Guide](docs/installation.md)** — Caddy/Nginx TLS 1.3 configuration, hardware sizing, container hardening.
+- ⚙️ **[Configuration & Secrets Reference](docs/configuration.md)** — Complete environment variable specification, entropy rules, and RBAC matrix.
+- 🔄 **[Upgrade, Migration & Rollback Runbook](docs/upgrade-and-rollback.md)** — Version upgrade procedures, advisory locks, irreversible migration warnings, and rollback protocols.
+- 💾 **[Backup & Disaster Recovery Guide](docs/backup-restore.md)** — Automated pg_dump scripts, snapshot retention, restore validation, and master key recovery.
+- 🔐 **[Key Management Architecture](docs/key-management.md)** — Ed25519 signing key provisioning, 4-phase rotation lifecycle, and AES-256-GCM encryption.
+- 🛡️ **[Production Security & Hardening Guide](docs/security.md)** — Network isolation, SSRF prevention, non-root execution, rate limiting, and incident response.
+- 💻 **[Client Integration & SDK Architecture](docs/client-integration.md)** — OpenAPI contract, offline token verification, hardware device fingerprinting, and application integrity.
 
 <br />
 

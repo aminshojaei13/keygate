@@ -3,7 +3,7 @@ services:
     image: ghcr.io/tabloy/keygate:latest
     # build: .  # uncomment to build from source
     ports:
-      - "9000:9000"
+      - "${PORT:-9000}:9000"
     # Everything in .env reaches the container (storage, release keys,
     # rate limits, Redis...). The values under `environment` take
     # precedence over .env and pin what is specific to this compose setup.
@@ -13,50 +13,102 @@ services:
         required: false
     environment:
       PORT: "9000"
-      ENVIRONMENT: production
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       BASE_URL: ${BASE_URL:-http://localhost:9000}
-      # The bundled postgres service, not the localhost URL in .env.example.
-      DATABASE_URL: postgres://keygate:keygate@postgres:5432/keygate?sslmode=disable
+      # Dynamic DATABASE_URL derived from POSTGRES credentials or custom URL override
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-keygate}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-keygate}?sslmode=disable}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       LICENSE_SIGNING_KEY: ${LICENSE_SIGNING_KEY:?Set LICENSE_SIGNING_KEY in .env}
-      # Also taken from the shell or `--env-file`, for deployments that
-      # inject secrets as environment variables rather than a .env file.
+      RELEASE_KEY_ENCRYPTION_KEY: ${RELEASE_KEY_ENCRYPTION_KEY:-}
+      MIGRATIONS_DIR: ${MIGRATIONS_DIR:-db/migrations}
+      # Administrative & integration settings
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_LIVEMODE: ${STRIPE_LIVEMODE:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       REDIS_URL: ${REDIS_URL:-}
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-}
+      STORAGE_REGION: ${STORAGE_REGION:-auto}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-}
+      STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL:-}
+      STORAGE_FORCE_PATH_STYLE: ${STORAGE_FORCE_PATH_STYLE:-false}
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - keygate-net
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+
+  # Dedicated migration runner for CI/CD pre-deploy hooks and manual upgrades
+  keygate-migrate:
+    image: ghcr.io/tabloy/keygate:latest
+    profiles: ["tools"]
+    command: ["migrate"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: "9000"
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-keygate}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-keygate}?sslmode=disable}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      LICENSE_SIGNING_KEY: ${LICENSE_SIGNING_KEY:?Set LICENSE_SIGNING_KEY in .env}
+      RELEASE_KEY_ENCRYPTION_KEY: ${RELEASE_KEY_ENCRYPTION_KEY:-}
+      MIGRATIONS_DIR: ${MIGRATIONS_DIR:-db/migrations}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - keygate-net
 
   postgres:
     image: postgres:18-alpine
     environment:
-      POSTGRES_USER: keygate
-      POSTGRES_PASSWORD: keygate
-      POSTGRES_DB: keygate
+      POSTGRES_USER: ${POSTGRES_USER:-keygate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-keygate}
     volumes:
       # postgres:18+ images expect the volume mounted at /var/lib/postgresql
       # (data lives in a versioned subdirectory); mounting .../data makes
       # initdb fail on a fresh volume. https://github.com/docker-library/postgres/issues/37
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keygate"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-keygate} -d $${POSTGRES_DB:-keygate}"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - keygate-net
+
+networks:
+  keygate-net:
+    driver: bridge
 
 volumes:
   pgdata:

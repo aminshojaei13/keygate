@@ -227,10 +227,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("database: %v", err)
 	}
-	if err := db.RunMigrations("db/migrations"); err != nil {
+	defer db.Close()
+
+	migrationsDir := os.Getenv("MIGRATIONS_DIR")
+	if migrationsDir == "" {
+		migrationsDir = "db/migrations"
+	}
+	if err := db.RunMigrations(migrationsDir); err != nil {
 		log.Fatalf("migrations: %v", err)
 	}
-	defer db.Close()
+
+	if os.Getenv("MIGRATE_ONLY") == "true" || (len(os.Args) > 1 && (os.Args[1] == "migrate" || os.Args[1] == "--migrate-only")) {
+		log.Printf("migrations complete; exiting (migrate-only mode)")
+		return
+	}
 
 	logger := newLogger(os.Stdout)
 

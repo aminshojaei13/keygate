@@ -37,12 +37,14 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
 
 # ── Runtime ──
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata curl
+RUN apk add --no-cache ca-certificates tzdata curl && \
+    addgroup -S -g 10001 keygate && \
+    adduser -S -u 10001 -G keygate keygate
 WORKDIR /app
-COPY --from=backend /keygate /usr/local/bin/keygate
-COPY --from=backend /app/db/migrations /app/db/migrations
-COPY --from=backend /app/web/dist /app/web/dist
-COPY --from=backend /app/docs /app/docs
+COPY --from=backend --chown=keygate:keygate /keygate /usr/local/bin/keygate
+COPY --from=backend --chown=keygate:keygate /app/db/migrations /app/db/migrations
+COPY --from=backend --chown=keygate:keygate /app/web/dist /app/web/dist
+COPY --from=backend --chown=keygate:keygate /app/docs /app/docs
 
 LABEL org.opencontainers.image.title="Keygate" \
       org.opencontainers.image.description="Open source license management platform" \
@@ -51,6 +53,9 @@ LABEL org.opencontainers.image.title="Keygate" \
       org.opencontainers.image.source="https://github.com/tabloy/keygate" \
       org.opencontainers.image.licenses="AGPL-3.0"
 
+USER keygate
 EXPOSE 9000
 ENV PORT=9000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -sf http://localhost:${PORT:-9000}/health || exit 1
 ENTRYPOINT ["keygate"]
