@@ -708,12 +708,23 @@ func main() {
 	// Long-lived so it can be cached aggressively; rotation is an
 	// operator action that forces clients to re-fetch.
 	licensePubHex := hex.EncodeToString(licenseSvc.SigningPublicKey())
+	licenseKid := license.KeyIDFromPublicKey(licenseSvc.SigningPublicKey())
 	v1.GET("/license/pubkey", func(c *gin.Context) {
 		c.Header("Cache-Control", "public, max-age=3600")
 		response.OK(c, gin.H{
+			"kid":        licenseKid,
 			"algorithm":  "ed25519",
 			"public_key": licensePubHex,
 			"format":     "hex",
+			"keys": []gin.H{
+				{
+					"kid":        licenseKid,
+					"algorithm":  "ed25519",
+					"public_key": licensePubHex,
+					"format":     "hex",
+					"status":     "active",
+				},
+			},
 		})
 	})
 

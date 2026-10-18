@@ -230,6 +230,12 @@ def _encodepoint(P):
 def _bit(h, i):
     return (h[i // 8] >> (i % 8)) & 1
 
+def _pure_python_ed25519_publickey(secret_seed):
+    h = hashlib.sha512(secret_seed).digest()
+    a = 2**(b - 2) + sum(2**i * _bit(h, i) for i in range(3, b - 2))
+    A = _scalarmult(B, a)
+    return _encodepoint(A)
+
 def _pure_python_ed25519_sign(secret_seed, message):
     h = hashlib.sha512(secret_seed).digest()
     a = 2**(b - 2) + sum(2**i * _bit(h, i) for i in range(3, b - 2))

@@ -1,0 +1,202 @@
+{
+  "format": "keygate-offline-token-test-vectors-v1",
+  "synthetic_keyring": {
+    "key_bd4e02f43853c45c": {
+      "algorithm": "ed25519",
+      "public_key_hex": "207a067892821e25d770f1fba0c47c11ff4b813e54162ece9eb839e076231ab6",
+      "status": "active",
+      "description": "Primary synthetic test signing key"
+    },
+    "key_6a5c71eafd9d9aad": {
+      "algorithm": "ed25519",
+      "public_key_hex": "568fa5531c7d74d27140d1ae964ff3c0b19f556fc23a879b251495fc1ba78631",
+      "status": "retired",
+      "description": "Secondary synthetic test signing key (rotated)"
+    }
+  },
+  "untrusted_key": {
+    "kid": "key_af822958f2d75afb",
+    "public_key_hex": "76a1592044a6e4f511265bca73a604d90b0529d1df602be30a19a9257660d1f5",
+    "description": "Key intentionally omitted from trusted keyring"
+  },
+  "vectors": [
+    {
+      "name": "valid_current_token",
+      "description": "Validly signed active token within expiration and term limits.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsIm1heF9leHBvcnRzIjoxMDAsInBybyI6dHJ1ZX0sImdyYyI6NywiaWF0IjoxNzc2NDk2NDAwLCJraWQiOiJrZXlfYmQ0ZTAyZjQzODUzYzQ1YyIsImxpZCI6ImxpY190ZXN0XzEyMzQ1IiwibmNlIjoiZml4ZWQtbm9uY2UtMDAwMSIsInBpZCI6InByb2RfZGVza3RvcF9hcHAiLCJwbG4iOiJwbGFuX3Byb19hbm51YWwiLCJzdHMiOiJhY3RpdmUiLCJ1cGQiOjE4MDgwMzYwMDAsInZlciI6IjEiLCJ2dW4iOjE4MDgwMzYwMDB9.KEvWlk-KTjOk8_FkNndXC0d-hl84B-P1vJBFQeG5RYHSLawqeJMbYuFRCAokLFUH_77GVhXLEjQzMGpSWfFCCg",
+      "expected_result": "valid",
+      "expected_error": null,
+      "evaluation_time": 1776500000,
+      "expected_claims": {
+        "ver": "1",
+        "kid": "key_bd4e02f43853c45c",
+        "lid": "lic_test_12345",
+        "pid": "prod_desktop_app",
+        "pln": "plan_pro_annual",
+        "sts": "active",
+        "did": "kgid:v1:darwin:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        "fpr": "114c60cc8e4a1b1f",
+        "ftr": {
+          "pro": true,
+          "max_exports": 100,
+          "cloud_sync": true,
+          "enterprise_unlimited": true
+        },
+        "iat": 1776496400,
+        "exp": 1779092000,
+        "vun": 1808036000,
+        "upd": 1808036000,
+        "grc": 7,
+        "nce": "fixed-nonce-0001"
+      },
+      "verify_params": {
+        "expected_product_id": "prod_desktop_app",
+        "expected_identifier": "kgid:v1:darwin:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        "required_features": [
+          "pro",
+          "cloud_sync"
+        ]
+      }
+    },
+    {
+      "name": "expired_token",
+      "description": "Token whose offline check-in window (exp) has expired.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc2NDk5OTAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsIm1heF9leHBvcnRzIjoxMDAsInBybyI6dHJ1ZX0sImdyYyI6NywiaWF0IjoxNzc2NDk2NDAwLCJraWQiOiJrZXlfYmQ0ZTAyZjQzODUzYzQ1YyIsImxpZCI6ImxpY190ZXN0XzEyMzQ1IiwibmNlIjoiZml4ZWQtbm9uY2UtMDAwMiIsInBpZCI6InByb2RfZGVza3RvcF9hcHAiLCJwbG4iOiJwbGFuX3Byb19hbm51YWwiLCJzdHMiOiJhY3RpdmUiLCJ1cGQiOjE4MDgwMzYwMDAsInZlciI6IjEiLCJ2dW4iOjE4MDgwMzYwMDB9.kPeO7EzIQTSAQ0wMJmlefBTYLX-dvqtEe9ViIugdMz5Ek-RaNNlhHPOOd-km-8r-8ESxjdGb3kly_uWu_4v1AA",
+      "expected_result": "invalid",
+      "expected_error": "token expired",
+      "evaluation_time": 1776500000,
+      "verify_params": {
+        "expected_product_id": "prod_desktop_app",
+        "expected_identifier": "kgid:v1:darwin:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      }
+    },
+    {
+      "name": "license_term_expired",
+      "description": "Token whose license term (vun) plus grace period (grc) has lapsed.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsIm1heF9leHBvcnRzIjoxMDAsInBybyI6dHJ1ZX0sImdyYyI6MywiaWF0IjoxNzc2NDk2NDAwLCJraWQiOiJrZXlfYmQ0ZTAyZjQzODUzYzQ1YyIsImxpZCI6ImxpY190ZXN0XzEyMzQ1IiwibmNlIjoiZml4ZWQtbm9uY2UtMDAwMyIsInBpZCI6InByb2RfZGVza3RvcF9hcHAiLCJwbG4iOiJwbGFuX3Byb19hbm51YWwiLCJzdHMiOiJhY3RpdmUiLCJ1cGQiOjE4MDgwMzYwMDAsInZlciI6IjEiLCJ2dW4iOjE3NzU2MzYwMDB9.-2rAdsXzFry8Gt1VpRbNCJmR3zYSFb-1wr3zdqyx3cL6-_CFidqKoC8D5HvUbSPqIycFDrmRk5l9C5vEj1y8Bg",
+      "expected_result": "invalid",
+      "expected_error": "license term expired",
+      "evaluation_time": 1776500000,
+      "verify_params": {
+        "expected_product_id": "prod_desktop_app",
+        "expected_identifier": "kgid:v1:darwin:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      }
+    },
+    {
+      "name": "invalid_signature",
+      "description": "Token where signature bytes were tampered.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsIm1heF9leHBvcnRzIjoxMDAsInBybyI6dHJ1ZX0sImdyYyI6NywiaWF0IjoxNzc2NDk2NDAwLCJraWQiOiJrZXlfYmQ0ZTAyZjQzODUzYzQ1YyIsImxpZCI6ImxpY190ZXN0XzEyMzQ1IiwibmNlIjoiZml4ZWQtbm9uY2UtMDAwMSIsInBpZCI6InByb2RfZGVza3RvcF9hcHAiLCJwbG4iOiJwbGFuX3Byb19hbm51YWwiLCJzdHMiOiJhY3RpdmUiLCJ1cGQiOjE4MDgwMzYwMDAsInZlciI6IjEiLCJ2dW4iOjE4MDgwMzYwMDB9.KEvWlk-KTjAk8_FkNndXC0d-hl84B-P1vJBFQeG5RYHSLawqeJMbYuFRCAokLFUH_77GVhXLEjQzMGpSWfFCCg",
+      "expected_result": "invalid",
+      "expected_error": "invalid signature",
+      "evaluation_time": 1776500000,
+      "verify_params": {}
+    },
+    {
+      "name": "tampered_payload",
+      "description": "Token where payload was altered after signing.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsImVudGVycHJpc2VfdW5saW1pdGVkIjp0cnVlLCJtYXhfZXhwb3J0cyI6MTAwLCJwcm8iOnRydWV9LCJncmMiOjcsImlhdCI6MTc3NjQ5NjQwMCwia2lkIjoia2V5X2JkNGUwMmY0Mzg1M2M0NWMiLCJsaWQiOiJsaWNfdGVzdF8xMjM0NSIsIm5jZSI6ImZpeGVkLW5vbmNlLTAwMDEiLCJwaWQiOiJwcm9kX2Rlc2t0b3BfYXBwIiwicGxuIjoicGxhbl9wcm9fYW5udWFsIiwic3RzIjoiYWN0aXZlIiwidXBkIjoxODA4MDM2MDAwLCJ2ZXIiOiIxIiwidnVuIjoxODA4MDM2MDAwfQ.KEvWlk-KTjOk8_FkNndXC0d-hl84B-P1vJBFQeG5RYHSLawqeJMbYuFRCAokLFUH_77GVhXLEjQzMGpSWfFCCg",
+      "expected_result": "invalid",
+      "expected_error": "invalid signature",
+      "evaluation_time": 1776500000,
+      "verify_params": {}
+    },
+    {
+      "name": "unknown_signing_key",
+      "description": "Token signed with key not present in trusted keyring.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsImVudGVycHJpc2VfdW5saW1pdGVkIjp0cnVlLCJtYXhfZXhwb3J0cyI6MTAwLCJwcm8iOnRydWV9LCJncmMiOjcsImlhdCI6MTc3NjQ5NjQwMCwia2lkIjoia2V5X2FmODIyOTU4ZjJkNzVhZmIiLCJsaWQiOiJsaWNfdGVzdF8xMjM0NSIsIm5jZSI6ImZpeGVkLW5vbmNlLTAwMDYiLCJwaWQiOiJwcm9kX2Rlc2t0b3BfYXBwIiwicGxuIjoicGxhbl9wcm9fYW5udWFsIiwic3RzIjoiYWN0aXZlIiwidXBkIjoxODA4MDM2MDAwLCJ2ZXIiOiIxIiwidnVuIjoxODA4MDM2MDAwfQ.QEdoV1ezCW1GlAQTuGKh0oEa5BJsYoCTPJLAIE3WCismi3HS0CAiMhOpHvajv6H6gxvjN8rFaUC97MUWhUodBA",
+      "expected_result": "invalid",
+      "expected_error": "unknown signing key",
+      "evaluation_time": 1776500000,
+      "verify_params": {}
+    },
+    {
+      "name": "rotated_key_token",
+      "description": "Token signed with secondary/rotated key in trusted keyring.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsImVudGVycHJpc2VfdW5saW1pdGVkIjp0cnVlLCJtYXhfZXhwb3J0cyI6MTAwLCJwcm8iOnRydWV9LCJncmMiOjcsImlhdCI6MTc3NjQ5NjQwMCwia2lkIjoia2V5XzZhNWM3MWVhZmQ5ZDlhYWQiLCJsaWQiOiJsaWNfdGVzdF8xMjM0NSIsIm5jZSI6ImZpeGVkLW5vbmNlLTAwMDciLCJwaWQiOiJwcm9kX2Rlc2t0b3BfYXBwIiwicGxuIjoicGxhbl9wcm9fYW5udWFsIiwic3RzIjoiYWN0aXZlIiwidXBkIjoxODA4MDM2MDAwLCJ2ZXIiOiIxIiwidnVuIjoxODA4MDM2MDAwfQ.Iu0hmtOL1_SsEwEi8nIiw71b0eEPylBdDyRgrK5cWFcFMkpnXVLucAUtA8FefW6083bBmp6sbU8_fHYKF1hGCA",
+      "expected_result": "valid",
+      "expected_error": null,
+      "evaluation_time": 1776500000,
+      "verify_params": {
+        "expected_product_id": "prod_desktop_app",
+        "expected_identifier": "kgid:v1:darwin:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      }
+    },
+    {
+      "name": "wrong_product_id",
+      "description": "Token signed for a different product than expected.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiJiMzMwZDdhMWYzMzY2NzdkIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsImVudGVycHJpc2VfdW5saW1pdGVkIjp0cnVlLCJtYXhfZXhwb3J0cyI6MTAwLCJwcm8iOnRydWV9LCJncmMiOjcsImlhdCI6MTc3NjQ5NjQwMCwia2lkIjoia2V5X2JkNGUwMmY0Mzg1M2M0NWMiLCJsaWQiOiJsaWNfdGVzdF8xMjM0NSIsIm5jZSI6ImZpeGVkLW5vbmNlLTAwMDgiLCJwaWQiOiJwcm9kX3VucmVsYXRlZF9hcHAiLCJwbG4iOiJwbGFuX3Byb19hbm51YWwiLCJzdHMiOiJhY3RpdmUiLCJ1cGQiOjE4MDgwMzYwMDAsInZlciI6IjEiLCJ2dW4iOjE4MDgwMzYwMDB9.q0oH8OGrX2WKHBO7LzTrpU5nbHgsKpkEMLMwEXT5ylvAV4kOJ7jPgROB1z9SBmz53mxyUWYYLRywnInQ8vViDQ",
+      "expected_result": "invalid",
+      "expected_error": "product ID mismatch",
+      "evaluation_time": 1776500000,
+      "verify_params": {
+        "expected_product_id": "prod_desktop_app"
+      }
+    },
+    {
+      "name": "incorrect_device_binding",
+      "description": "Token issued for device A verified on device B.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsIm1heF9leHBvcnRzIjoxMDAsInBybyI6dHJ1ZX0sImdyYyI6NywiaWF0IjoxNzc2NDk2NDAwLCJraWQiOiJrZXlfYmQ0ZTAyZjQzODUzYzQ1YyIsImxpZCI6ImxpY190ZXN0XzEyMzQ1IiwibmNlIjoiZml4ZWQtbm9uY2UtMDAwMSIsInBpZCI6InByb2RfZGVza3RvcF9hcHAiLCJwbG4iOiJwbGFuX3Byb19hbm51YWwiLCJzdHMiOiJhY3RpdmUiLCJ1cGQiOjE4MDgwMzYwMDAsInZlciI6IjEiLCJ2dW4iOjE4MDgwMzYwMDB9.KEvWlk-KTjOk8_FkNndXC0d-hl84B-P1vJBFQeG5RYHSLawqeJMbYuFRCAokLFUH_77GVhXLEjQzMGpSWfFCCg",
+      "expected_result": "invalid",
+      "expected_error": "device identifier mismatch",
+      "evaluation_time": 1776500000,
+      "verify_params": {
+        "expected_product_id": "prod_desktop_app",
+        "expected_identifier": "kgid:v1:windows:1122334455667788112233445566778811223344556677881122334455667788"
+      }
+    },
+    {
+      "name": "missing_entitlement",
+      "description": "Token missing an application-required feature flag.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsIm1heF9leHBvcnRzIjoxMDAsInBybyI6dHJ1ZX0sImdyYyI6NywiaWF0IjoxNzc2NDk2NDAwLCJraWQiOiJrZXlfYmQ0ZTAyZjQzODUzYzQ1YyIsImxpZCI6ImxpY190ZXN0XzEyMzQ1IiwibmNlIjoiZml4ZWQtbm9uY2UtMDAwMSIsInBpZCI6InByb2RfZGVza3RvcF9hcHAiLCJwbG4iOiJwbGFuX3Byb19hbm51YWwiLCJzdHMiOiJhY3RpdmUiLCJ1cGQiOjE4MDgwMzYwMDAsInZlciI6IjEiLCJ2dW4iOjE4MDgwMzYwMDB9.KEvWlk-KTjOk8_FkNndXC0d-hl84B-P1vJBFQeG5RYHSLawqeJMbYuFRCAokLFUH_77GVhXLEjQzMGpSWfFCCg",
+      "expected_result": "invalid",
+      "expected_error": "missing required entitlement",
+      "evaluation_time": 1776500000,
+      "verify_params": {
+        "expected_product_id": "prod_desktop_app",
+        "required_features": [
+          "pro",
+          "satellite_uplink"
+        ]
+      }
+    },
+    {
+      "name": "malformed_token_no_dot",
+      "description": "Token without dot delimiter.",
+      "token": "eyJsaWQiOiJsaWNfdGVzdF8xMjM0NSJ9",
+      "expected_result": "invalid",
+      "expected_error": "invalid token format",
+      "evaluation_time": 1776500000,
+      "verify_params": {}
+    },
+    {
+      "name": "malformed_token_corrupted_base64",
+      "description": "Token with invalid base64 characters.",
+      "token": "!!!not_b64!!!.!!!not_b64!!!",
+      "expected_result": "invalid",
+      "expected_error": "invalid signature",
+      "evaluation_time": 1776500000,
+      "verify_params": {}
+    },
+    {
+      "name": "unsupported_version",
+      "description": "Token with unsupported schema version (ver=99).",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsImVudGVycHJpc2VfdW5saW1pdGVkIjp0cnVlLCJtYXhfZXhwb3J0cyI6MTAwLCJwcm8iOnRydWV9LCJncmMiOjcsImlhdCI6MTc3NjQ5NjQwMCwia2lkIjoia2V5X2JkNGUwMmY0Mzg1M2M0NWMiLCJsaWQiOiJsaWNfdGVzdF8xMjM0NSIsIm5jZSI6ImZpeGVkLW5vbmNlLTAwMTMiLCJwaWQiOiJwcm9kX2Rlc2t0b3BfYXBwIiwicGxuIjoicGxhbl9wcm9fYW5udWFsIiwic3RzIjoiYWN0aXZlIiwidXBkIjoxODA4MDM2MDAwLCJ2ZXIiOiI5OSIsInZ1biI6MTgwODAzNjAwMH0.hGl-Wa2XcwLKqd178c0oYQQ6qmQyyVC0GMuARQP4s_tKjuHOBdOycCJ_8rtUB65eTLB-uNNouU7DIJZXE0ulAQ",
+      "expected_result": "invalid",
+      "expected_error": "unsupported token version",
+      "evaluation_time": 1776500000,
+      "verify_params": {}
+    },
+    {
+      "name": "legacy_token_no_kid_or_ver",
+      "description": "Legacy token lacking ver and kid claims verified with primary key.",
+      "token": "eyJkaWQiOiJrZ2lkOnYxOmRhcndpbjphYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5IiwiZXhwIjoxNzc5MDkyMDAwLCJmcHIiOiIxMTRjNjBjYzhlNGExYjFmIiwiZnRyIjp7ImNsb3VkX3N5bmMiOnRydWUsImVudGVycHJpc2VfdW5saW1pdGVkIjp0cnVlLCJtYXhfZXhwb3J0cyI6MTAwLCJwcm8iOnRydWV9LCJncmMiOjcsImlhdCI6MTc3NjQ5NjQwMCwibGlkIjoibGljX3Rlc3RfMTIzNDUiLCJuY2UiOiJmaXhlZC1ub25jZS0wMDE0IiwicGlkIjoicHJvZF9kZXNrdG9wX2FwcCIsInBsbiI6InBsYW5fcHJvX2FubnVhbCIsInN0cyI6ImFjdGl2ZSIsInVwZCI6MTgwODAzNjAwMCwidnVuIjoxODA4MDM2MDAwfQ.eaj2WiCA45YkgGG1Wn-KOQNBhLfmtql2ZhHzSbe_-J13ElDYDPi02_Xe3Ae1jZbO6oXjkxzmRemmYx9t9fs6Ag",
+      "expected_result": "valid",
+      "expected_error": null,
+      "evaluation_time": 1776500000,
+      "verify_params": {
+        "expected_product_id": "prod_desktop_app",
+        "expected_identifier": "kgid:v1:darwin:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      }
+    }
+  ]
+}

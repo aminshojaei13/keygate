@@ -143,6 +143,10 @@ paths:
                   data:
                     type: object
                     properties:
+                      kid:
+                        type: string
+                        example: "key_bd4e02f43853c45c"
+                        description: Identifier of the primary active signing key
                       algorithm:
                         type: string
                         enum: [ed25519]
@@ -152,6 +156,17 @@ paths:
                       public_key:
                         type: string
                         description: 32-byte Ed25519 public key, hex-encoded (64 chars)
+                      keys:
+                        type: array
+                        description: Active and recently rotated verification keys for multi-key keyring verification
+                        items:
+                          type: object
+                          properties:
+                            kid: { type: string, example: "key_bd4e02f43853c45c" }
+                            algorithm: { type: string, enum: [ed25519] }
+                            public_key: { type: string }
+                            format: { type: string, enum: [hex] }
+                            status: { type: string, enum: [active, retired] }
 
   /license/activate:
     post:
