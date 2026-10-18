@@ -797,6 +797,7 @@ func main() {
 	v1.GET("/releases/:product_slug/feed.json", append(feedMW, releasePublicH.FeedVelopack)...)
 	v1.GET("/releases/:product_slug/velopack/*path", append(feedMW, releasePublicH.FeedVelopackIndex)...)
 	v1.GET("/releases/:product_slug/upgrade.json", append(feedMW, releasePublicH.FeedTauri)...)
+	v1.GET("/releases/:product_slug/signing-key", append(feedMW, releasePublicH.SigningKeys)...)
 
 	// Old /releases/feed.* (no product slug, license-key auth) → 410 Gone
 	// with a migration hint. Pre-launch hard cutover; no live clients.

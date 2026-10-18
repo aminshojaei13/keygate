@@ -905,6 +905,46 @@ paths:
         "404":
           description: Unknown product_slug
 
+  /releases/{product_slug}/signing-key:
+    get:
+      tags: [Releases]
+      summary: Public artifact-verification key discovery
+      description: |
+        Public keys are public. This endpoint returns the active and retired
+        Ed25519 artifact-verification keys for the product. This allows installed
+        updaters and application integrity verifiers to follow key rotations
+        without requiring a client binary update. Private keys are never exposed.
+      operationId: getReleaseSigningKeys
+      parameters:
+        - $ref: "#/components/parameters/ProductSlug"
+      responses:
+        "200":
+          description: Active and retired artifact signing keys for the product
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      keys:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            kid:            { type: string, example: "psk_2026_10" }
+                            algorithm:      { type: string, enum: [ed25519] }
+                            public_key_pem: { type: string, description: "SPKI-less 'ED25519 PUBLIC KEY' PEM (Sparkle convention)" }
+                            public_key_b64: { type: string, description: "raw 32-byte key, std base64" }
+                            tauri_pubkey:   { type: string, description: "base64('Ed' + 8-byte key id + 32-byte key)" }
+                            status:         { type: string, enum: [active, retired] }
+        "400":
+          description: Missing product_slug
+        "404":
+          description: Unknown product_slug or no signing keys found
+
 components:
   parameters:
     ProductSlug:

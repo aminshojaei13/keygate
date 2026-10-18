@@ -2,7 +2,9 @@ package handler
 
 import (
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -520,3 +522,74 @@ func (h *ReleasePublicHandler) writeFeedCacheHeaders(c *gin.Context, req feedReq
 	}
 	c.Header("Cache-Control", "public, max-age="+strconv.Itoa(int(FeedPublicMaxAge.Seconds())))
 }
+
+// GET /api/v1/releases/:product_slug/signing-key
+//
+// Public artifact-verification key discovery for the product.
+// Returns active and retired public keys so clients/updaters can verify
+// release artifacts and application integrity manifests across rotations.
+func (h *ReleasePublicHandler) SigningKeys(c *gin.Context) {
+	slug := strings.ToLower(strings.TrimSpace(c.Param("product_slug")))
+	if slug == "" {
+		response.BadRequest(c, "product_slug is required in the URL path")
+		return
+	}
+	prod, err := h.store.FindProductBySlug(c.Request.Context(), slug)
+	if err != nil {
+		response.NotFound(c, "product not found")
+		return
+	}
+	if !model.ProductSupports(prod.Type, model.CapReleases) {
+		response.NotFound(c, "product not found")
+		return
+	}
+
+	keys, err := h.store.ListSigningKeys(c.Request.Context(), prod.ID)
+	if err != nil {
+		response.Internal(c, err)
+		return
+	}
+	if len(keys) == 0 {
+		response.NotFound(c, "no signing keys found for this product")
+		return
+	}
+
+	type KeyItem struct {
+		KID          string `json:"kid"`
+		Algorithm    string `json:"algorithm"`
+		PublicKeyPEM string `json:"public_key_pem"`
+		PublicKeyB64 string `json:"public_key_b64"`
+		TauriPubKey  string `json:"tauri_pubkey,omitempty"`
+		Status       string `json:"status"`
+	}
+
+	items := make([]KeyItem, 0, len(keys))
+	for _, k := range keys {
+		status := "retired"
+		if k.Active {
+			status = "active"
+		}
+
+		var pemStr string
+		rawKey, decodeErr := base64.StdEncoding.DecodeString(k.PublicKey)
+		if decodeErr == nil && len(rawKey) == ed25519.PublicKeySize {
+			pemBlock := &pem.Block{Type: "ED25519 PUBLIC KEY", Bytes: rawKey}
+			pemStr = string(pem.EncodeToMemory(pemBlock))
+		}
+
+		tauriKey := service.TauriPublicKey(k.PublicKey)
+
+		items = append(items, KeyItem{
+			KID:          k.ID,
+			Algorithm:    "ed25519",
+			PublicKeyPEM: pemStr,
+			PublicKeyB64: k.PublicKey,
+			TauriPubKey:  tauriKey,
+			Status:       status,
+		})
+	}
+
+	c.Header("Cache-Control", "public, max-age=300")
+	response.OK(c, gin.H{"keys": items})
+}
+

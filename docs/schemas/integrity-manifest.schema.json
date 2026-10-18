@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://keygate.app/schemas/integrity-manifest.schema.json",
+  "title": "KeygateApplicationIntegrityManifest",
+  "description": "Deterministic, language-agnostic application integrity manifest and signed envelope schema for the Keygate ecosystem.",
+  "oneOf": [
+    { "$ref": "#/$defs/SignedEnvelope" },
+    { "$ref": "#/$defs/Manifest" }
+  ],
+  "$defs": {
+    "SignedEnvelope": {
+      "type": "object",
+      "required": ["format", "algorithm", "key_id", "payload", "signature"],
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["keygate-manifest-envelope-v1"],
+          "description": "Envelope format specification version."
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": ["ed25519"],
+          "description": "Cryptographic signature algorithm used."
+        },
+        "key_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_.-]+$",
+          "description": "Public identifier of the signing key."
+        },
+        "payload": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "description": "Base64URL-encoded (unpadded) canonical RFC 8785 JSON manifest payload."
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$",
+          "description": "Base64URL-encoded 64-byte Ed25519 digital signature of the canonical payload."
+        }
+      }
+    },
+    "Manifest": {
+      "type": "object",
+      "required": ["manifest_version", "product_id", "release_id", "created_at", "key_id", "files"],
+      "additionalProperties": false,
+      "properties": {
+        "manifest_version": {
+          "type": "string",
+          "enum": ["1.0"],
+          "description": "Manifest schema version."
+        },
+        "product_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Unique product or application identifier."
+        },
+        "release_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Release version string or semver (e.g. 1.4.0)."
+        },
+        "platform": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Target operating system (darwin, windows, linux, android, ios, all)."
+        },
+        "architecture": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Target hardware architecture (x86_64, arm64, universal, all)."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp of manifest generation."
+        },
+        "key_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_.-]+$",
+          "description": "Identifier of the public signing key authorized to sign this release."
+        },
+        "files": {
+          "type": "array",
+          "description": "Lexicographically sorted list of protected files relative to release root.",
+          "items": {
+            "$ref": "#/$defs/FileEntry"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Optional arbitrary build metadata (e.g. git commit, build number).",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "FileEntry": {
+      "type": "object",
+      "required": ["path", "sha256", "size"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!/)(?!.*//)(?!.*(?:/|^)\\.\\.(?:/|$))[^\\\\:\\*\\?\"<>|\\x00-\\x1F]+$",
+          "description": "Normalized POSIX relative path from the release root. Backslashes, path traversal (..), absolute paths, and control characters are strictly forbidden."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Hexadecimal lowercase SHA-256 cryptographic digest of the file contents."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "File size in bytes."
+        },
+        "executable": {
+          "type": "boolean",
+          "description": "Optional flag indicating if the file has POSIX executable permission bits."
+        }
+      }
+    }
+  }
+}
