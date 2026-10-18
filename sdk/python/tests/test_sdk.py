@@ -175,3 +175,77 @@ class TestErrorHierarchy(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestManifestEnvelopeHardening(unittest.TestCase):
+    """Regression tests: an untrusted envelope must not be accepted just
+    because *some* trusted key signed it, and unsupported formats must be
+    refused rather than parsed on a best-effort basis."""
+
+    SEED = bytes.fromhex("11" * 32)
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
+        from integrity_manifest import _pure_python_ed25519_publickey
+
+        cls.pubkey = _pure_python_ed25519_publickey(cls.SEED)
+
+    def _envelope(self, key_id="key_test01", manifest_version=1, envelope_version=None):
+        import base64
+        import json as _json
+
+        from keygate.offline import base64url_decode
+
+        from integrity_manifest import ed25519_sign
+
+        # Start from a real signed payload so the structure is the one the
+        # server emits, then rewrite the fields under test and re-sign.
+        base = {
+            "manifest_version": manifest_version,
+            "product_id": "prd_test",
+            "version": "1.0.0",
+            "created_at": "2026-10-18T00:00:00Z",
+            "signing_key_id": key_id,
+            "files": [{"path": "bin/app", "sha256": "0" * 64, "size": 3}],
+        }
+        payload = _json.dumps(base, separators=(",", ":")).encode()
+        payload_b64 = base64.urlsafe_b64encode(payload).rstrip(b"=").decode()
+        sig = ed25519_sign(self.SEED, payload_b64.encode("ascii"))
+        return {
+            "format": "keygate-integrity-v1",
+            "manifest_version": manifest_version if envelope_version is None else envelope_version,
+            "payload": payload_b64,
+            "signature": base64.urlsafe_b64encode(sig).rstrip(b"=").decode(),
+            "signing_key_id": key_id,
+            "algorithm": "ed25519",
+        }
+
+    def test_unknown_key_id_is_rejected_with_keyring(self):
+        verifier = ManifestVerifier(trusted_keys={"key_test01": self.pubkey})
+        env = self._envelope(key_id="key_attacker")
+        # The signature is valid under the trusted key, so only the key ID
+        # check stands between this envelope and acceptance.
+        env["signing_key_id"] = "key_attacker"
+        with self.assertRaises(ManifestVerificationError) as ctx:
+            verifier.verify_envelope(env)
+        self.assertIn(ctx.exception.code, {"UNKNOWN_SIGNING_KEY", "KEY_ID_MISMATCH"})
+
+    def test_pinned_single_key_still_verifies(self):
+        verifier = ManifestVerifier(single_pubkey=self.pubkey)
+        m = verifier.verify_envelope(self._envelope())
+        self.assertEqual(m.product_id, "prd_test")
+
+    def test_unsupported_manifest_version_is_rejected(self):
+        verifier = ManifestVerifier(trusted_keys={"key_test01": self.pubkey})
+        with self.assertRaises(ManifestVerificationError) as ctx:
+            verifier.verify_envelope(self._envelope(manifest_version=2))
+        self.assertEqual(ctx.exception.code, "UNSUPPORTED_VERSION")
+
+    def test_payload_key_id_must_match_envelope(self):
+        verifier = ManifestVerifier(trusted_keys={"key_test01": self.pubkey, "key_other": self.pubkey})
+        env = self._envelope(key_id="key_test01")
+        env["key_id"] = "key_other"
+        with self.assertRaises(ManifestVerificationError) as ctx:
+            verifier.verify_envelope(env)
+        self.assertEqual(ctx.exception.code, "KEY_ID_MISMATCH")

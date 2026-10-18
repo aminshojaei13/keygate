@@ -117,8 +117,11 @@ func ValidateHTTPURL(field, raw string) *AppError {
 // ValidateIdentifier validates an incoming device or user activation identifier
 // against the Keygate device identity protocol rules.
 func ValidateIdentifier(identifier string) *AppError {
-	identifier = strings.TrimSpace(identifier)
-	if identifier == "" {
+	// Whitespace-only input is "missing", not malformed. Anything else
+	// is validated exactly as the caller sent it: the value that reaches
+	// the activation row is this same string, so trimming only here would
+	// validate a different identifier than the one stored.
+	if strings.TrimSpace(identifier) == "" {
 		return BadRequest("identifier is required")
 	}
 	if len(identifier) > 256 {

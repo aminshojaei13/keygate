@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -342,5 +341,20 @@ func TestDeviceID_PlatformSpecificFailureConditions(t *testing.T) {
 	}
 	if len(digest) != 64 {
 		t.Errorf("expected 64 hex digest, got %d", len(digest))
+	}
+}
+
+// Regression: surrounding whitespace must be refused, not trimmed. The
+// validator's output is expected to describe the string the caller keeps,
+// and persistence/lookup use the raw value.
+func TestDeviceID_RejectsSurroundingWhitespace(t *testing.T) {
+	const base = "kgid:v1:darwin:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
+	for _, id := range []string{base + "\n", base + " ", " " + base, "\t" + base, base + "\t"} {
+		if err := deviceid.ValidateIdentifierFormat(id); err == nil {
+			t.Errorf("ValidateIdentifierFormat(%q) = nil, want error", id)
+		}
+	}
+	if err := deviceid.ValidateIdentifierFormat(base); err != nil {
+		t.Errorf("ValidateIdentifierFormat(canonical) = %v, want nil", err)
 	}
 }

@@ -16,8 +16,6 @@ func TestActivationLifecycle_MetadataAndScheme(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 
-	lic := activationLicense(t, s, ctx, 3)
-
 	cases := []struct {
 		name       string
 		identifier string
@@ -45,6 +43,12 @@ func TestActivationLifecycle_MetadataAndScheme(t *testing.T) {
 		},
 	}
 
+	// Each subtest takes its own slot on this licence, so the cap has
+	// to cover all of them: with 3 the fourth case was refused with
+	// ACTIVATION_LIMIT, which is the limit working, not a
+	// scheme-detection failure.
+	lic := activationLicense(t, s, ctx, len(cases))
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			act := &model.Activation{
@@ -56,7 +60,7 @@ func TestActivationLifecycle_MetadataAndScheme(t *testing.T) {
 				Label:          "Test Device",
 				IPAddress:      "192.0.2.1",
 			}
-			if err := s.ActivateWithinLimit(ctx, act, 3); err != nil {
+			if err := s.ActivateWithinLimit(ctx, act, len(cases)); err != nil {
 				t.Fatalf("activate: %v", err)
 			}
 

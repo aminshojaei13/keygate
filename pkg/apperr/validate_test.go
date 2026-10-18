@@ -105,3 +105,39 @@ func TestValidateURL(t *testing.T) {
 		}
 	}
 }
+
+// Regression: ValidateIdentifier used to trim the identifier before
+// validating it, so "device-id\n" passed and was then persisted with the
+// newline intact (the API handler stores the raw string). Lookups are
+// exact, so the same physical machine could hold several activation rows
+// by re-sending its identifier with different padding — one slot burned
+// per spelling. The canonical spelling is now the only accepted one.
+func TestValidateIdentifierRejectsNonCanonicalSpelling(t *testing.T) {
+	valid := []string{
+		"550e8400-e29b-41d4-a716-446655440000",
+		"kgid:v1:darwin:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7",
+		"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		"my-custom-host-id-1234",
+	}
+	for _, id := range valid {
+		if err := ValidateIdentifier(id); err != nil {
+			t.Errorf("ValidateIdentifier(%q) = %v, want nil", id, err)
+		}
+	}
+
+	invalid := []string{
+		"device-id\n",
+		"device-id\r\n",
+		"device-id ",
+		" device-id",
+		"\tdevice-id",
+		"device-id\t",
+		"   ",
+		"",
+	}
+	for _, id := range invalid {
+		if err := ValidateIdentifier(id); err == nil {
+			t.Errorf("ValidateIdentifier(%q) = nil, want error", id)
+		}
+	}
+}

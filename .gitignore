@@ -46,5 +46,9 @@ web/.vite/
 coverage.html
 seed
 
+# `make db-backup` writes these into the working directory; a dump holds
+# every license key and customer address, so it must never be committed.
+backup-*.sql
+
 # Stray build output from `go build ./cmd/server` without -o
 /server

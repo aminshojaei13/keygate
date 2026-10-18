@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 )
 
 // DefaultExcludePatterns contains standard patterns excluded from integrity manifests

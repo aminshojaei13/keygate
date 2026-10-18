@@ -131,7 +131,19 @@ func VerifyInstalledFiles(m *Manifest, installDir string) (*VerificationResult, 
 	if err != nil {
 		return nil, fmt.Errorf("resolve installDir: %w", err)
 	}
-	rootPrefix := cleanRoot + string(filepath.Separator)
+	// The installation root may itself be reached through a symlink
+	// (/tmp → /private/tmp on macOS, a symlinked app container on other
+	// systems). Resolve it once, so the containment check below compares
+	// two fully-resolved paths instead of rejecting every file on such a
+	// host.
+	resolvedRoot := cleanRoot
+	if r, err := filepath.EvalSymlinks(cleanRoot); err == nil {
+		resolvedRoot = r
+	}
+	rootPrefix := resolvedRoot + string(filepath.Separator)
+	withinRoot := func(p string) bool {
+		return p == resolvedRoot || strings.HasPrefix(p, rootPrefix)
+	}
 
 	res := &VerificationResult{
 		TotalFiles: len(m.Files),
@@ -148,13 +160,12 @@ func VerifyInstalledFiles(m *Manifest, installDir string) (*VerificationResult, 
 
 		// Enforce strict directory traversal jail
 		absTarget, err := filepath.Abs(targetPath)
-		if err != nil || (!strings.HasPrefix(absTarget, rootPrefix) && absTarget != cleanRoot) {
+		if err != nil || (!strings.HasPrefix(absTarget, cleanRoot+string(filepath.Separator)) && absTarget != cleanRoot) {
 			res.Errors = append(res.Errors, fmt.Sprintf("path traversal blocked for %q -> %q", entry.Path, absTarget))
 			continue
 		}
 
-		info, err := os.Lstat(absTarget)
-		if err != nil {
+		if _, err := os.Lstat(absTarget); err != nil {
 			if os.IsNotExist(err) {
 				res.MissingFiles = append(res.MissingFiles, entry.Path)
 			} else {
@@ -163,16 +174,44 @@ func VerifyInstalledFiles(m *Manifest, installDir string) (*VerificationResult, 
 			continue
 		}
 
-		// Reject symbolic links pointing outside the installation root
-		if info.Mode()&os.ModeSymlink != 0 {
-			evalPath, err := filepath.EvalSymlinks(absTarget)
-			if err != nil || (!strings.HasPrefix(evalPath, rootPrefix) && evalPath != cleanRoot) {
-				res.ModifiedFiles = append(res.ModifiedFiles, FileMismatch{
-					Path:   entry.Path,
-					Reason: "symlink points outside protected installation directory",
-				})
-				continue
-			}
+		// Resolve every component, not just the last one. Lstat on
+		// "root/sub/file" reports the file: a directory inside the
+		// installation can be replaced with a symlink to somewhere else
+		// and the lexical path stays inside the root while the bytes
+		// come from outside it. Requiring the fully-resolved path to
+		// remain inside the resolved root is what actually enforces the
+		// jail.
+		resolved, err := filepath.EvalSymlinks(absTarget)
+		if err != nil {
+			res.Errors = append(res.Errors, fmt.Sprintf("resolve %q: %v", entry.Path, err))
+			continue
+		}
+		if !withinRoot(resolved) {
+			res.ModifiedFiles = append(res.ModifiedFiles, FileMismatch{
+				Path:           entry.Path,
+				ExpectedSHA256: entry.SHA256,
+				ExpectedSize:   entry.Size,
+				Reason:         "path resolves outside the protected installation directory (symlink escape)",
+			})
+			continue
+		}
+
+		info, err := os.Stat(resolved)
+		if err != nil {
+			res.Errors = append(res.Errors, fmt.Sprintf("stat %q: %v", entry.Path, err))
+			continue
+		}
+		// Hashing anything but a regular file can block forever (a FIFO
+		// inside the install root named like a protected file) or read
+		// from a device node. Manifests only ever describe real files.
+		if !info.Mode().IsRegular() {
+			res.ModifiedFiles = append(res.ModifiedFiles, FileMismatch{
+				Path:           entry.Path,
+				ExpectedSHA256: entry.SHA256,
+				ExpectedSize:   entry.Size,
+				Reason:         "not a regular file",
+			})
+			continue
 		}
 
 		// Size check fast-path
@@ -188,7 +227,7 @@ func VerifyInstalledFiles(m *Manifest, installDir string) (*VerificationResult, 
 		}
 
 		// Streaming SHA-256 computation
-		actualHash, _, err := HashFile(absTarget)
+		actualHash, _, err := HashFile(resolved)
 		if err != nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("hash file %q: %v", entry.Path, err))
 			continue

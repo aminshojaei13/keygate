@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -601,6 +602,45 @@ func TestLicenseActivation_InvalidIdentifierFormats(t *testing.T) {
 		if code != http.StatusBadRequest {
 			t.Errorf("expected 400 for identifier %q, got %d (resp: %v)", inv, code, resp)
 		}
+	}
+}
+
+// Regression: an identifier padded with whitespace used to pass
+// validation (which trimmed its own copy) and then be stored verbatim, so
+// one physical machine could take several activation slots by re-sending
+// its identifier with different padding. The padded spelling must now be
+// refused before any slot is taken.
+func TestLicenseActivation_PaddedIdentifierIsRejectedWithoutTakingSlot(t *testing.T) {
+	h := setupActivationHarness(t, 1)
+	lic := h.createLicense(t, "padded@example.com", model.StatusActive, nil)
+
+	const canonical = "550e8400-e29b-41d4-a716-446655440000"
+	for _, padded := range []string{canonical + "\n", canonical + " ", " " + canonical} {
+		code, resp := h.postActivate(map[string]any{
+			"license_key": lic.LicenseKey,
+			"identifier":  padded,
+		})
+		if code != http.StatusBadRequest {
+			t.Fatalf("identifier %q: got %d (%v), want 400", padded, code, resp)
+		}
+	}
+
+	n, err := h.store.CountActivations(context.Background(), lic.ID)
+	if err != nil {
+		t.Fatalf("count activations: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("padded identifiers consumed %d activation slot(s), want 0", n)
+	}
+
+	// The canonical spelling still works, so the rejection is about the
+	// padding and not about the identifier.
+	code, resp := h.postActivate(map[string]any{
+		"license_key": lic.LicenseKey,
+		"identifier":  canonical,
+	})
+	if code != http.StatusOK {
+		t.Fatalf("canonical identifier: got %d (%v), want 200", code, resp)
 	}
 }
 

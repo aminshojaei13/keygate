@@ -2,7 +2,6 @@ package license
 
 import (
 	"crypto/ed25519"
-	"crypto/rand"
 	"errors"
 	"testing"
 	"time"

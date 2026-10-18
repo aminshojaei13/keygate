@@ -360,3 +360,65 @@ func TestIntegrity_DeterministicOutput(t *testing.T) {
 		t.Errorf("signature mismatch in deterministic Ed25519 runs")
 	}
 }
+
+// Regression: a directory inside the installation root replaced by a
+// symlink to a directory outside it must fail verification. Lstat on
+// "root/lib/app.bin" follows the intermediate symlink and reports a
+// regular file, so only resolving the whole path and re-checking
+// containment against the resolved root catches it. The bytes here match
+// the signed digest, which is exactly the case the jail has to reject.
+func TestIntegrity_SymlinkedDirectoryCannotEscapeRoot(t *testing.T) {
+	pub, priv := generateTestKeypair(t)
+	keyID := "test_key_symlink"
+
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "lib"), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "lib", "app.bin"), []byte("PROTECTED"), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	entries, err := integrity.ScanReleaseDirectory(integrity.ScanOptions{BaseDir: root})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	env, err := integrity.SignManifest(&integrity.Manifest{
+		ProductID: "prd_symlink", Version: "1.0.0", Files: entries,
+	}, priv, keyID)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	verified, err := integrity.VerifyEnvelope(env, map[string]ed25519.PublicKey{keyID: pub})
+	if err != nil {
+		t.Fatalf("verify envelope: %v", err)
+	}
+
+	baseline, err := integrity.VerifyInstalledFiles(verified, root)
+	if err != nil {
+		t.Fatalf("baseline verify: %v", err)
+	}
+	if !baseline.Valid {
+		t.Fatalf("baseline should verify: %+v", baseline)
+	}
+
+	// Move the protected directory outside the root and point at it.
+	if err := os.Rename(filepath.Join(root, "lib"), filepath.Join(outside, "lib")); err != nil {
+		t.Fatalf("move dir: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "lib"), filepath.Join(root, "lib")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	res, err := integrity.VerifyInstalledFiles(verified, root)
+	if err != nil {
+		t.Fatalf("verify after symlink: %v", err)
+	}
+	if res.Valid {
+		t.Fatalf("symlinked directory outside the root verified as valid: %+v", res)
+	}
+	if len(res.ModifiedFiles) != 1 {
+		t.Fatalf("modified files = %d, want 1 (%+v)", len(res.ModifiedFiles), res)
+	}
+}

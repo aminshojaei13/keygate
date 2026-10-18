@@ -218,9 +218,18 @@ func ParseIdentifier(identifier string) (scheme string, platform string, digest 
 // ValidateIdentifierFormat validates the syntactic shape of any identifier.
 // Rejects control characters, whitespace, invalid prefixes, or length violations.
 func ValidateIdentifierFormat(identifier string) error {
-	identifier = strings.TrimSpace(identifier)
 	if identifier == "" {
 		return errors.New("identifier is required")
+	}
+	// Reject surrounding whitespace instead of trimming it. The caller
+	// persists the same string it validated, and database lookups are
+	// exact, so silently trimming here would validate one identifier
+	// ("abc") while storing another ("abc\n") — a second row that takes
+	// a second activation slot for the same physical machine. Only the
+	// canonical spelling is accepted; clients send the identifier they
+	// derived, not a padded copy.
+	if identifier != strings.TrimSpace(identifier) {
+		return errors.New("identifier must not begin or end with whitespace")
 	}
 	if len(identifier) > 256 {
 		return errors.New("identifier exceeds 256 characters")

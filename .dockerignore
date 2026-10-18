@@ -7,6 +7,7 @@ bin/
 tmp/
 tests/
 seed
+backup-*.sql
 web/node_modules
 web/dist
 *.md
