@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
+  ArrowRightLeft,
   Ban,
   Check,
   Copy,
@@ -11,6 +12,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Trash2,
   Unlink,
@@ -563,15 +565,40 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
     },
     onError: (e: Error) => showToast(e.message, "error"),
   })
-  // Activation deletion is destructive — wrap in a confirmation
-  // state so a stray ghost-click on the trash icon (icons sit
-  // close together in the row) doesn't immediately revoke a device.
+  const [transferring, setTransferring] = useState(false)
   const [confirmDeactivation, setConfirmDeactivation] = useState<{ id: string; label: string } | null>(null)
-  const deleteActMut = useMutation({
-    mutationFn: admin.deleteActivation,
+  const [confirmReactivation, setConfirmReactivation] = useState<{ id: string; label: string } | null>(null)
+  const [confirmDeleteAct, setConfirmDeleteAct] = useState<{ id: string; label: string } | null>(null)
+
+  const deactivateMut = useMutation({
+    mutationFn: (actId: string) => admin.deactivateActivation(actId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "license", id] })
+      qc.invalidateQueries({ queryKey: ["admin", "licenses"] })
       setConfirmDeactivation(null)
+      showToast(t("licenses.deactivateSuccess"), "success")
+    },
+    onError: (e: Error) => showToast(e.message, "error"),
+  })
+
+  const reactivateMut = useMutation({
+    mutationFn: (actId: string) => admin.reactivateActivation(actId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "license", id] })
+      qc.invalidateQueries({ queryKey: ["admin", "licenses"] })
+      setConfirmReactivation(null)
+      showToast(t("licenses.reactivateSuccess"), "success")
+    },
+    onError: (e: Error) => showToast(e.message, "error"),
+  })
+
+  const deleteActMut = useMutation({
+    mutationFn: (actId: string) => admin.deleteActivation(actId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "license", id] })
+      qc.invalidateQueries({ queryKey: ["admin", "licenses"] })
+      setConfirmDeleteAct(null)
+      showToast("Activation record deleted", "success")
     },
     onError: (e: Error) => showToast(e.message, "error"),
   })
@@ -617,6 +644,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
               <TabsTrigger value="info">{t("licenses.info")}</TabsTrigger>
               <TabsTrigger value="usage">{t("licenses.usage")}</TabsTrigger>
               <TabsTrigger value="seats">{t("licenses.seats")}</TabsTrigger>
+              <TabsTrigger value="audit">{t("licenses.audit")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="info" className="-mr-6 min-h-0 flex-1 overflow-y-auto pr-6">
@@ -967,67 +995,163 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                   >
                     {t("licenses.changePlan")}
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={lic.status === "revoked"}
+                    onClick={() => setTransferring(true)}
+                  >
+                    <ArrowRightLeft className="h-4 w-4 mr-1" />
+                    {t("licenses.transfer")}
+                  </Button>
                 </div>
 
                 {/* Activations — hidden for SaaS products (which don't
                   use per-device activation; their user model is seats). */}
-                {lic.product?.type !== "saas" && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold mb-3">
-                        {t("licenses.activations")} ({lic.activations?.length || 0} / {lic.plan?.max_activations || "-"}
-                        )
-                      </h3>
-                      {lic.activations && lic.activations.length > 0 ? (
-                        <DataTable>
-                          <DataTableHeader>
-                            <DataTableRow>
-                              <DataTableHead>{t("licenses.identifier")}</DataTableHead>
-                              <DataTableHead>{t("licenses.type")}</DataTableHead>
-                              <DataTableHead>{t("licenses.label")}</DataTableHead>
-                              <DataTableHead>{t("licenses.lastVerified")}</DataTableHead>
-                              <DataTableHead className="w-12" />
-                            </DataTableRow>
-                          </DataTableHeader>
-                          <DataTableBody>
-                            {lic.activations.map((act) => (
-                              <DataTableRow key={act.id}>
-                                <DataTableCell>
-                                  <code className="block max-w-[22ch] break-all text-xs" title={act.identifier}>
-                                    {act.identifier}
-                                  </code>
-                                </DataTableCell>
-                                <DataTableCell>
-                                  <Badge variant="secondary">{act.identifier_type}</Badge>
-                                </DataTableCell>
-                                <DataTableCell className="text-muted-foreground">{act.label || "-"}</DataTableCell>
-                                <DataTableCell className="text-muted-foreground text-xs">
-                                  {formatDate(act.last_verified)}
-                                </DataTableCell>
-                                <DataTableCell>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    onClick={() =>
-                                      setConfirmDeactivation({ id: act.id, label: act.label || act.identifier })
-                                    }
-                                    disabled={deleteActMut.isPending && deleteActMut.variables === act.id}
-                                  >
-                                    <Trash2 className="h-3 w-3 text-destructive" />
-                                  </Button>
-                                </DataTableCell>
+                {lic.product?.type !== "saas" && (() => {
+                  const activeCount = lic.activations?.filter((a) => a.status === "active" || (!a.status && a.status !== "deactivated")).length || 0
+                  const maxActivations = lic.plan?.max_activations || 0
+                  return (
+                    <>
+                      <Separator />
+                      <div>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">{t("licenses.activations")}</h3>
+                            <Badge
+                              variant={maxActivations > 0 && activeCount >= maxActivations ? "destructive" : "secondary"}
+                              className="text-xs"
+                            >
+                              {t("licenses.slotUsage", { active: activeCount, max: maxActivations || "∞" })}
+                            </Badge>
+                            {maxActivations > 0 && activeCount >= maxActivations && (
+                              <Badge variant="outline" className="text-amber-600 border-amber-300 text-[10px]">
+                                {t("licenses.capacityReached")}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        {lic.activations && lic.activations.length > 0 ? (
+                          <DataTable>
+                            <DataTableHeader>
+                              <DataTableRow>
+                                <DataTableHead>{t("licenses.identifier")}</DataTableHead>
+                                <DataTableHead>{t("licenses.scheme")}</DataTableHead>
+                                <DataTableHead>{t("licenses.label")}</DataTableHead>
+                                <DataTableHead>{t("common.status")}</DataTableHead>
+                                <DataTableHead>{t("licenses.lastVerified")}</DataTableHead>
+                                <DataTableHead className="w-24 text-right">{t("common.actions")}</DataTableHead>
                               </DataTableRow>
-                            ))}
-                          </DataTableBody>
-                        </DataTable>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">{t("licenses.noActivations")}</p>
-                      )}
-                    </div>
-                  </>
-                )}
+                            </DataTableHeader>
+                            <DataTableBody>
+                              {lic.activations.map((act) => {
+                                const isActive = act.status === "active" || (!act.status && act.status !== "deactivated")
+                                return (
+                                  <DataTableRow key={act.id}>
+                                    <DataTableCell>
+                                      <code className="block max-w-[20ch] break-all text-xs font-mono" title={act.identifier}>
+                                        {act.identifier}
+                                      </code>
+                                    </DataTableCell>
+                                    <DataTableCell>
+                                      <div className="flex flex-col gap-0.5 items-start">
+                                        <Badge variant="outline" className="text-[10px] font-mono">
+                                          {act.scheme || "legacy"}
+                                        </Badge>
+                                        <span className="text-[10px] text-muted-foreground">{act.identifier_type}</span>
+                                      </div>
+                                    </DataTableCell>
+                                    <DataTableCell>
+                                      <div className="text-xs">
+                                        <p className="font-medium">{act.label || "-"}</p>
+                                        {act.ip_address && (
+                                          <p className="text-[11px] text-muted-foreground font-mono">{act.ip_address}</p>
+                                        )}
+                                      </div>
+                                    </DataTableCell>
+                                    <DataTableCell>
+                                      {isActive ? (
+                                        <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">
+                                          {t("licenses.activeStatus")}
+                                        </Badge>
+                                      ) : (
+                                        <div className="flex flex-col gap-0.5 items-start">
+                                          <Badge variant="secondary" className="text-[10px] text-muted-foreground">
+                                            {t("licenses.deactivated")}
+                                          </Badge>
+                                          {act.deactivated_reason && (
+                                            <span className="text-[10px] text-muted-foreground italic">
+                                              ({act.deactivated_reason})
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </DataTableCell>
+                                    <DataTableCell className="text-muted-foreground text-xs">
+                                      <div>
+                                        <p title="Last verified">{formatDate(act.last_verified)}</p>
+                                        {act.deactivated_at && (
+                                          <p className="text-[10px] text-muted-foreground">
+                                            Off: {formatDate(act.deactivated_at)}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </DataTableCell>
+                                    <DataTableCell>
+                                      <div className="flex items-center gap-1 justify-end">
+                                        {isActive ? (
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-amber-600 hover:text-amber-700"
+                                            title={t("licenses.deactivate")}
+                                            onClick={() =>
+                                              setConfirmDeactivation({ id: act.id, label: act.label || act.identifier })
+                                            }
+                                            disabled={deactivateMut.isPending && deactivateMut.variables === act.id}
+                                          >
+                                            <Pause className="h-3.5 w-3.5" />
+                                          </Button>
+                                        ) : (
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-emerald-600 hover:text-emerald-700"
+                                            title={t("licenses.reactivate")}
+                                            onClick={() =>
+                                              setConfirmReactivation({ id: act.id, label: act.label || act.identifier })
+                                            }
+                                            disabled={reactivateMut.isPending && reactivateMut.variables === act.id}
+                                          >
+                                            <RotateCcw className="h-3.5 w-3.5" />
+                                          </Button>
+                                        )}
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-destructive"
+                                          title={t("licenses.deleteActivation")}
+                                          onClick={() =>
+                                            setConfirmDeleteAct({ id: act.id, label: act.label || act.identifier })
+                                          }
+                                          disabled={deleteActMut.isPending && deleteActMut.variables === act.id}
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    </DataTableCell>
+                                  </DataTableRow>
+                                )
+                              })}
+                            </DataTableBody>
+                          </DataTable>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">{t("licenses.noActivations")}</p>
+                        )}
+                      </div>
+                    </>
+                  )
+                })()}
 
                 {/* Entitlements */}
                 {lic.plan?.entitlements && lic.plan.entitlements.length > 0 && (
@@ -1056,6 +1180,10 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <TabsContent value="seats" className="-mr-6 min-h-0 flex-1 overflow-y-auto pr-6">
               <SeatsTab licenseId={id} maxSeats={lic?.plan?.max_seats || 0} />
             </TabsContent>
+
+            <TabsContent value="audit" className="-mr-6 min-h-0 flex-1 overflow-y-auto pr-6">
+              <AuditTab licenseId={id} />
+            </TabsContent>
           </Tabs>
         )}
 
@@ -1067,6 +1195,14 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
             currentPlanId={lic.plan_id}
             currentPlan={lic.plan}
             onClose={() => setChangingPlan(false)}
+          />
+        )}
+        {/* Transfer License Dialog */}
+        {transferring && lic && (
+          <TransferLicenseDialog
+            licenseId={id}
+            currentEmail={lic.email}
+            onClose={() => setTransferring(false)}
           />
         )}
         <AlertDialog open={confirmUnlink} onOpenChange={() => setConfirmUnlink(false)}>
@@ -1083,6 +1219,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
             </div>
           </AlertDialogContent>
         </AlertDialog>
+        {/* Soft deactivation confirm */}
         <AlertDialog open={!!confirmDeactivation} onOpenChange={() => setConfirmDeactivation(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -1094,16 +1231,279 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <div className="flex justify-end gap-2">
               <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
               <AlertDialogAction
-                className="bg-destructive text-white hover:bg-destructive/90"
-                onClick={() => confirmDeactivation && deleteActMut.mutate(confirmDeactivation.id)}
+                className="bg-amber-600 text-white hover:bg-amber-700"
+                onClick={() => confirmDeactivation && deactivateMut.mutate(confirmDeactivation.id)}
+                disabled={deactivateMut.isPending}
               >
-                {t("licenses.deactivate")}
+                {deactivateMut.isPending ? t("common.loading") : t("licenses.deactivate")}
+              </AlertDialogAction>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+        {/* Reactivation confirm */}
+        <AlertDialog open={!!confirmReactivation} onOpenChange={() => setConfirmReactivation(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {t("licenses.reactivateTitle", { device: confirmReactivation?.label || "" })}
+              </AlertDialogTitle>
+              <AlertDialogDescription>{t("licenses.reactivateDesc")}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="flex justify-end gap-2">
+              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={() => confirmReactivation && reactivateMut.mutate(confirmReactivation.id)}
+                disabled={reactivateMut.isPending}
+              >
+                {reactivateMut.isPending ? t("common.loading") : t("licenses.reactivate")}
+              </AlertDialogAction>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+        {/* Hard delete activation record confirm */}
+        <AlertDialog open={!!confirmDeleteAct} onOpenChange={() => setConfirmDeleteAct(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("licenses.deleteActivation")}</AlertDialogTitle>
+              <AlertDialogDescription>{t("licenses.deleteActivationConfirm")}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="flex justify-end gap-2">
+              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-white hover:bg-destructive/90"
+                onClick={() => confirmDeleteAct && deleteActMut.mutate(confirmDeleteAct.id)}
+                disabled={deleteActMut.isPending}
+              >
+                {deleteActMut.isPending ? t("common.loading") : t("common.delete")}
               </AlertDialogAction>
             </div>
           </AlertDialogContent>
         </AlertDialog>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function TransferLicenseDialog({
+  licenseId,
+  currentEmail,
+  onClose,
+}: {
+  licenseId: string
+  currentEmail: string
+  onClose: () => void
+}) {
+  const { t } = useI18n()
+  const qc = useQueryClient()
+  const [newEmail, setNewEmail] = useState("")
+  const [releaseActivations, setReleaseActivations] = useState(true)
+  const [reason, setReason] = useState("")
+  const [confirming, setConfirming] = useState(false)
+
+  const transferMut = useMutation({
+    mutationFn: () =>
+      admin.transferLicense(licenseId, {
+        new_email: newEmail.trim(),
+        release_activations: releaseActivations,
+        reason: reason.trim() || undefined,
+      }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["admin"] })
+      showToast(t("licenses.transferSuccess", { email: r.email }), "success")
+      onClose()
+    },
+    onError: (e: Error) => showToast(e.message, "error"),
+  })
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("licenses.transferTitle")}</DialogTitle>
+          <DialogDescription>{t("licenses.transferDesc")}</DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-xs text-muted-foreground">Current Owner</Label>
+              <p className="mt-1 font-mono text-sm">{currentEmail}</p>
+            </div>
+            <div>
+              <Label htmlFor="new-owner-email">{t("licenses.newOwnerEmail")}</Label>
+              <Input
+                id="new-owner-email"
+                type="email"
+                placeholder="customer@example.com"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                className="mt-1"
+                required
+              />
+            </div>
+            <div className="flex items-start gap-2 pt-1">
+              <input
+                id="release-activations"
+                type="checkbox"
+                checked={releaseActivations}
+                onChange={(e) => setReleaseActivations(e.target.checked)}
+                className="mt-0.5 rounded border-input text-primary focus:ring-primary h-4 w-4"
+              />
+              <div className="text-xs">
+                <Label htmlFor="release-activations" className="font-medium cursor-pointer">
+                  {t("licenses.releaseActivations")}
+                </Label>
+                <p className="text-muted-foreground mt-0.5">
+                  {t("licenses.releaseActivationsDesc")}
+                </p>
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="transfer-reason">{t("licenses.transferReason")}</Label>
+              <Input
+                id="transfer-reason"
+                type="text"
+                maxLength={256}
+                placeholder="e.g. Corporate reassignment or account change"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="mt-1 text-xs"
+              />
+            </div>
+          </div>
+        </DialogBody>
+        <DialogFooter className="flex justify-end gap-2 pt-2">
+          <Button variant="ghost" onClick={onClose} disabled={transferMut.isPending}>
+            {t("common.cancel")}
+          </Button>
+          {!confirming ? (
+            <Button
+              disabled={!newEmail.trim() || newEmail.trim().toLowerCase() === currentEmail.toLowerCase()}
+              onClick={() => setConfirming(true)}
+            >
+              <ArrowRightLeft className="h-4 w-4 mr-1" />
+              {t("licenses.transfer")}
+            </Button>
+          ) : (
+            <Button
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={transferMut.isPending}
+              onClick={() => transferMut.mutate()}
+            >
+              {transferMut.isPending ? t("common.loading") : `Confirm Transfer`}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function AuditTab({ licenseId }: { licenseId: string }) {
+  const { t } = useI18n()
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["admin", "license", licenseId, "audit"],
+    queryFn: () => admin.listLicenseAudit(licenseId, { limit: 50 }),
+  })
+
+  if (isLoading) {
+    return <div className="h-48 animate-pulse bg-muted rounded-lg" />
+  }
+
+  if (error) {
+    return (
+      <div className="py-8 text-center text-sm text-destructive">
+        Failed to load audit events: {(error as Error).message}
+      </div>
+    )
+  }
+
+  const logs = data?.audit_logs || []
+  if (logs.length === 0) {
+    return (
+      <div className="py-12 text-center text-muted-foreground">
+        <p className="text-sm">{t("licenses.noAuditLogs")}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3 py-2">
+      <DataTable>
+        <DataTableHeader>
+          <DataTableRow>
+            <DataTableHead>Action</DataTableHead>
+            <DataTableHead>Actor</DataTableHead>
+            <DataTableHead>Details</DataTableHead>
+            <DataTableHead>IP</DataTableHead>
+            <DataTableHead>Time</DataTableHead>
+          </DataTableRow>
+        </DataTableHeader>
+        <DataTableBody>
+          {logs.map((log) => {
+            const changes = log.changes as Record<string, unknown> | undefined
+            return (
+              <DataTableRow key={log.id}>
+                <DataTableCell>
+                  <Badge variant="outline" className="font-mono text-xs uppercase">
+                    {log.action}
+                  </Badge>
+                </DataTableCell>
+                <DataTableCell className="text-xs">
+                  <span className="font-medium">{log.actor_type || "system"}</span>
+                  {log.actor_id && (
+                    <span className="text-muted-foreground block text-[10px] truncate max-w-[12ch]">
+                      {log.actor_id}
+                    </span>
+                  )}
+                </DataTableCell>
+                <DataTableCell className="text-xs">
+                  {changes ? (
+                    <div className="space-y-0.5">
+                      {changes.from_email && changes.to_email && (
+                        <div>
+                          <span className="text-muted-foreground">{String(changes.from_email)}</span>
+                          {" → "}
+                          <span className="font-medium">{String(changes.to_email)}</span>
+                        </div>
+                      )}
+                      {changes.activations_released !== undefined && (
+                        <div className="text-muted-foreground text-[11px]">
+                          Released activations: {String(changes.activations_released)}
+                        </div>
+                      )}
+                      {changes.reason && (
+                        <div className="text-muted-foreground italic text-[11px]">
+                          Reason: {String(changes.reason)}
+                        </div>
+                      )}
+                      {changes.identifier && (
+                        <div className="font-mono text-[11px] truncate max-w-[24ch]">
+                          {String(changes.identifier)}
+                        </div>
+                      )}
+                      {!changes.from_email && !changes.identifier && !changes.reason && (
+                        <code className="text-[10px] text-muted-foreground block max-w-[28ch] truncate">
+                          {JSON.stringify(changes)}
+                        </code>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </DataTableCell>
+                <DataTableCell className="text-xs text-muted-foreground font-mono">
+                  {log.ip_address || "-"}
+                </DataTableCell>
+                <DataTableCell className="text-xs text-muted-foreground">
+                  {formatDate(log.created_at)}
+                </DataTableCell>
+              </DataTableRow>
+            )
+          })}
+        </DataTableBody>
+      </DataTable>
+    </div>
   )
 }
 

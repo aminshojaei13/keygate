@@ -638,6 +638,9 @@ function ReleaseDetailDialog({ release, onClose }: { release: Release; onClose: 
                 ? t("releases.detailYankedDesc")
                 : t("releases.detailPublishedDesc")}
           </DialogDescription>
+          <div className="mt-2 rounded bg-muted/60 px-3 py-1.5 text-[11px] text-muted-foreground">
+            {t("releases.integrityNotice")}
+          </div>
         </DialogHeader>
         <DialogBody>
           <div className="space-y-4 py-2">
@@ -709,8 +712,13 @@ function ArtifactRow({
           ? `${formatBytes(artifact.file_size)} · sha256:${artifact.sha256.slice(0, 12)}…`
           : t("releases.notUploaded")}
       </span>
+      {ready && artifact.signing_key_id && (
+        <Badge variant="outline" className="font-mono text-[10px]" title={`Signing Key ID: ${artifact.signing_key_id}`}>
+          kid:{artifact.signing_key_id.slice(0, 8)}
+        </Badge>
+      )}
       {ready && artifact.ed25519_sig && (
-        <Badge variant="outline" className="text-[10px]" title={artifact.signing_key_id}>
+        <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300" title={artifact.signing_key_id}>
           {t("releases.signed")}
         </Badge>
       )}

@@ -329,6 +329,24 @@ export const admin = {
   refundLicense: (id: string) => post(`/admin/licenses/${id}/refund`),
 
   deleteActivation: (id: string) => del(`/admin/activations/${id}`),
+  deactivateActivation: (id: string) => post<{ status: string; id: string }>(`/admin/activations/${id}/deactivate`, {}),
+  reactivateActivation: (id: string) => post<{ status: string; id: string }>(`/admin/activations/${id}/reactivate`, {}),
+  transferLicense: (
+    id: string,
+    data: { new_email: string; release_activations?: boolean; reason?: string },
+  ) =>
+    post<{ status: string; license_id: string; email: string; activations_released: number }>(
+      `/admin/licenses/${id}/transfer`,
+      data,
+    ),
+  listLicenseAudit: (licenseId: string, params?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams()
+    q.set("entity", "license")
+    q.set("entity_id", licenseId)
+    if (params?.limit) q.set("limit", String(params.limit))
+    if (params?.offset) q.set("offset", String(params.offset))
+    return get<{ audit_logs: AuditLog[]; total: number }>(`/admin/audit-logs?${q}`)
+  },
 
   listAPIKeys: (params?: { product_id?: string; search?: string; limit?: number; offset?: number }) =>
     get<Paged<{ api_keys: APIKey[] }>>(`/admin/api-keys?${listQuery(params)}`),
@@ -714,6 +732,10 @@ export interface Activation {
   ip_address?: string
   last_verified: string
   created_at: string
+  scheme?: string
+  status?: "active" | "deactivated" | string
+  deactivated_at?: string
+  deactivated_reason?: string
 }
 
 export interface APIKey {

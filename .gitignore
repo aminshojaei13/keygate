@@ -40,7 +40,7 @@ web/dist/
 web/.vite/
 
 # Test artifacts
-tests/
+/tests/
 *.test
 *.out
 coverage.html
