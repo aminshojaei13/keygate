@@ -4,7 +4,9 @@ import {
   Ban,
   Check,
   Copy,
+  Download,
   Eye,
+  FileCheck,
   Mail,
   Package,
   Pause,
@@ -14,12 +16,14 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Shield,
   Trash2,
   Unlink,
 } from "lucide-react"
 import { useState } from "react"
 import { Link } from "react-router-dom"
 import { CopyableId } from "@/components/copyable-id"
+import { OfflineTokenInspector } from "@/components/offline-token-inspector"
 import { PlanSelect } from "@/components/plan-select"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
@@ -644,6 +648,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
               <TabsTrigger value="info">{t("licenses.info")}</TabsTrigger>
               <TabsTrigger value="usage">{t("licenses.usage")}</TabsTrigger>
               <TabsTrigger value="seats">{t("licenses.seats")}</TabsTrigger>
+              <TabsTrigger value="offline">{t("licenses.offlineTab")}</TabsTrigger>
               <TabsTrigger value="audit">{t("licenses.audit")}</TabsTrigger>
             </TabsList>
 
@@ -1181,6 +1186,10 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
               <SeatsTab licenseId={id} maxSeats={lic?.plan?.max_seats || 0} />
             </TabsContent>
 
+            <TabsContent value="offline" className="-mr-6 min-h-0 flex-1 overflow-y-auto pr-6">
+              <OfflineTab lic={lic} />
+            </TabsContent>
+
             <TabsContent value="audit" className="-mr-6 min-h-0 flex-1 overflow-y-auto pr-6">
               <AuditTab licenseId={id} />
             </TabsContent>
@@ -1460,7 +1469,7 @@ function AuditTab({ licenseId }: { licenseId: string }) {
                 <DataTableCell className="text-xs">
                   {changes ? (
                     <div className="space-y-0.5">
-                      {changes.from_email && changes.to_email && (
+                      {Boolean(changes.from_email && changes.to_email) && (
                         <div>
                           <span className="text-muted-foreground">{String(changes.from_email)}</span>
                           {" → "}
@@ -1472,12 +1481,12 @@ function AuditTab({ licenseId }: { licenseId: string }) {
                           Released activations: {String(changes.activations_released)}
                         </div>
                       )}
-                      {changes.reason && (
+                      {Boolean(changes.reason) && (
                         <div className="text-muted-foreground italic text-[11px]">
                           Reason: {String(changes.reason)}
                         </div>
                       )}
-                      {changes.identifier && (
+                      {Boolean(changes.identifier) && (
                         <div className="font-mono text-[11px] truncate max-w-[24ch]">
                           {String(changes.identifier)}
                         </div>
@@ -1790,5 +1799,157 @@ function ChangePlanDialog({
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function OfflineTab({ lic }: { lic: any }) {
+  const { t } = useI18n()
+  const qc = useQueryClient()
+  const ttlDays = lic.plan?.token_ttl_days
+
+  const [identifier, setIdentifier] = useState("")
+  const [label, setLabel] = useState("")
+  const [issuedToken, setIssuedToken] = useState<string | null>(null)
+  const [copiedToken, setCopiedToken] = useState(false)
+
+  const issueMut = useMutation({
+    mutationFn: (data: { identifier: string; label?: string }) => admin.issueOfflineToken(lic.id, data),
+    onSuccess: (res) => {
+      setIssuedToken(res.token)
+      qc.invalidateQueries({ queryKey: ["admin", "license", lic.id] })
+      qc.invalidateQueries({ queryKey: ["admin", "licenses"] })
+      showToast(t("licenses.tokenIssuedSuccess"), "success")
+    },
+    onError: (e: Error) => showToast(e.message, "error"),
+  })
+
+  const downloadLicFile = (tokenStr: string, idStr: string) => {
+    const filename = `license-${(lic.license_key_hint || lic.id.slice(0, 8))}-${idStr.slice(0, 10).replace(/[^a-zA-Z0-9_-]/g, "_")}.lic`
+    const blob = new Blob([tokenStr], { type: "application/octet-stream" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    showToast(`Downloaded ${filename}`, "success")
+  }
+
+  const copyToken = (tokenStr: string) => {
+    navigator.clipboard.writeText(tokenStr)
+    setCopiedToken(true)
+    setTimeout(() => setCopiedToken(false), 2000)
+    showToast("Token copied to clipboard", "success")
+  }
+
+  return (
+    <div className="space-y-6 py-2">
+      {/* Plan parameters */}
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+            <div>
+              <p className="text-muted-foreground">{t("licenses.offlineTtl")}</p>
+              <p className="font-medium mt-1">
+                {ttlDays ? t("licenses.offlineTtlDays", { days: ttlDays }) : t("licenses.offlineTtlNone")}
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">{t("common.product")}</p>
+              <p className="font-medium mt-1 capitalize">{lic.product?.type || "desktop"} product</p>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">{t("licenses.offlineNotice")}</p>
+        </CardContent>
+      </Card>
+
+      {/* Issuance form for air-gapped machine */}
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <div className="space-y-1">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              {t("licenses.issueOffline")}
+            </h4>
+            <p className="text-xs text-muted-foreground">{t("licenses.issueOfflineDesc")}</p>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (!identifier.trim()) return
+              issueMut.mutate({ identifier: identifier.trim(), label: label.trim() || undefined })
+            }}
+            className="space-y-3"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">{t("licenses.deviceIdentifier")}</Label>
+                <Input
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder={t("licenses.deviceIdentifierPlaceholder")}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">{t("licenses.deviceLabel")}</Label>
+                <Input
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder={t("licenses.deviceLabelPlaceholder")}
+                />
+              </div>
+            </div>
+
+            <Button type="submit" size="sm" disabled={issueMut.isPending || !identifier.trim()}>
+              <FileCheck className="h-4 w-4 mr-2" />
+              {issueMut.isPending ? t("common.loading") : t("licenses.issueOffline")}
+            </Button>
+          </form>
+
+          {/* Newly issued token box */}
+          {issuedToken && (
+            <div className="border rounded-lg p-3 bg-muted/40 space-y-2 mt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" /> Issued Token Ready
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => copyToken(issuedToken)}
+                  >
+                    {copiedToken ? <Check className="h-3 w-3 mr-1 text-emerald-600" /> : <Copy className="h-3 w-3 mr-1" />}
+                    Copy
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800 text-white"
+                    onClick={() => downloadLicFile(issuedToken, identifier || "offline")}
+                  >
+                    <Download className="h-3 w-3 mr-1" />
+                    {t("licenses.downloadLic")}
+                  </Button>
+                </div>
+              </div>
+              <pre className="text-xs font-mono bg-muted p-2 rounded break-all whitespace-pre-wrap max-h-32 overflow-y-auto select-all">
+                {issuedToken}
+              </pre>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Interactive Token Inspector */}
+      <div>
+        <h3 className="font-semibold text-sm mb-3">{t("integration.inspectorTitle")}</h3>
+        <OfflineTokenInspector initialToken={issuedToken || undefined} />
+      </div>
+    </div>
   )
 }

@@ -339,6 +339,14 @@ export const admin = {
       `/admin/licenses/${id}/transfer`,
       data,
     ),
+  issueOfflineToken: (
+    licenseId: string,
+    data: { identifier: string; label?: string },
+  ) =>
+    post<{ token: string; status: string; license_id: string; identifier: string }>(
+      `/admin/licenses/${licenseId}/offline-token`,
+      data,
+    ),
   listLicenseAudit: (licenseId: string, params?: { limit?: number; offset?: number }) => {
     const q = new URLSearchParams()
     q.set("entity", "license")
@@ -542,6 +550,8 @@ export const admin = {
       update_command?: string
       checked_at?: string
     }>("/admin/system/update-check"),
+  getMigrationStatus: () => get<{ migrations: MigrationRecord[] }>("/admin/system/migrations"),
+  getLicensePublicKey: () => get<LicensePublicKeyResponse>("/license/pubkey"),
 
   // ─── Releases (industry-standard bundle model) ───
   listReleases: (params?: {
@@ -1084,3 +1094,42 @@ export const RELEASE_PLATFORMS = [
 ] as const
 
 export const RELEASE_CHANNELS = ["stable", "beta", "alpha", "dev"] as const
+
+export interface MigrationRecord {
+  filename: string
+  applied_at: string
+}
+
+export interface LicensePublicKeyItem {
+  kid: string
+  algorithm: string
+  public_key: string
+  format: string
+  status?: string
+}
+
+export interface LicensePublicKeyResponse {
+  kid: string
+  algorithm: string
+  public_key: string
+  format: string
+  keys?: LicensePublicKeyItem[]
+}
+
+export interface OfflineTokenPayload {
+  ver?: string
+  kid?: string
+  lid: string
+  pid: string
+  pln: string
+  sts: string
+  did: string
+  ftr?: Record<string, unknown>
+  iat: number
+  exp: number
+  vun?: number
+  upd?: number
+  grc?: number
+  nce?: string
+  fpr?: string
+}

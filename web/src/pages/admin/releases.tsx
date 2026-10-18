@@ -7,12 +7,14 @@ import {
   Plus,
   Rocket,
   Settings2,
+  ShieldCheck,
   Trash2,
   Upload,
   X,
 } from "lucide-react"
 import { type ChangeEvent, useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
+import { IntegrityManifestInspector } from "@/components/integrity-manifest-inspector"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
 import {
@@ -70,6 +72,7 @@ export default function ReleasesPage() {
   const [statusFilter, setStatusFilter] = useState("")
   const [page, setPage] = useState(0)
   const [creating, setCreating] = useState(false)
+  const [inspectingManifest, setInspectingManifest] = useState(false)
   const [yanking, setYanking] = useState<Release | null>(null)
   const [unyanking, setUnyanking] = useState<Release | null>(null)
   const [deleting, setDeleting] = useState<Release | null>(null)
@@ -192,7 +195,10 @@ export default function ReleasesPage() {
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("nav.releases")}</h1>
           <p className="text-muted-foreground">{t("releases.subtitle")}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={() => setInspectingManifest(true)}>
+            <ShieldCheck className="h-4 w-4 mr-2" /> Inspect Manifest
+          </Button>
           <Button variant="outline" onClick={() => setSettings({ productId: productFilter, tab: "signing" })}>
             <Settings2 className="h-4 w-4 mr-2" /> {t("releases.updateSettings")}
           </Button>
@@ -457,11 +463,29 @@ export default function ReleasesPage() {
                   setConfirmPublish(null)
                 }}
               >
-                {t("releases.publishAnyway")}
               </AlertDialogAction>
             </div>
           </AlertDialogContent>
         </AlertDialog>
+      )}
+
+      {inspectingManifest && (
+        <Dialog open onOpenChange={() => setInspectingManifest(false)}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Application Integrity Manifest Inspector
+              </DialogTitle>
+              <DialogDescription>
+                Inspect and verify <code>keygate-integrity-v1</code> signed manifest envelopes and file hash manifests.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody>
+              <IntegrityManifestInspector />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )

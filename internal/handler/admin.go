@@ -27,11 +27,12 @@ import (
 )
 
 type AdminHandler struct {
-	Store   *store.Store
-	Webhook *service.WebhookService
-	Email   *service.EmailService
-	Expiry  *service.ExpiryChecker
-	Metered *service.MeteredBillingSyncer
+	Store      *store.Store
+	Webhook    *service.WebhookService
+	Email      *service.EmailService
+	Expiry     *service.ExpiryChecker
+	Metered    *service.MeteredBillingSyncer
+	LicenseSvc *service.LicenseService
 	// FeedURLTTL is how long a presigned artifact URL inside a public
 	// update feed stays usable (STORAGE_FEED_URL_TTL). Gating a
 	// product's feeds does not reach links already handed out, so an
@@ -2821,6 +2822,82 @@ func (h *AdminHandler) TransferLicense(c *gin.Context) {
 		"license_id":           id,
 		"email":                req.NewEmail,
 		"activations_released": released,
+	})
+}
+
+// IssueOfflineToken issues an Ed25519-signed offline license token for a device on a license.
+func (h *AdminHandler) IssueOfflineToken(c *gin.Context) {
+	id := c.Param("id")
+	pid, err := h.Store.GetLicenseProductID(c, id)
+	if err != nil {
+		response.NotFound(c, "license not found")
+		return
+	}
+	if !requireKeyProductScope(c, pid) {
+		return
+	}
+
+	var req struct {
+		Identifier string `json:"identifier" binding:"required"`
+		Label      string `json:"label"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "identifier is required")
+		return
+	}
+	if valErr := apperr.ValidateIdentifier(req.Identifier); valErr != nil {
+		writeAppErr(c, valErr)
+		return
+	}
+
+	lic, err := h.Store.FindLicenseByID(c, id)
+	if err != nil {
+		response.NotFound(c, "license not found")
+		return
+	}
+
+	key := h.Store.DecryptLicenseKey(lic)
+	if key == "" {
+		response.Internal(c, errors.New("cannot decrypt license key"))
+		return
+	}
+
+	if h.LicenseSvc == nil {
+		response.Internal(c, errors.New("license service not initialized"))
+		return
+	}
+
+	res, err := h.LicenseSvc.Activate(c.Request.Context(), service.ActivateInput{
+		LicenseKey:     key,
+		Identifier:     req.Identifier,
+		IdentifierType: "device",
+		Label:          req.Label,
+		IPAddress:      c.ClientIP(),
+		ProductID:      lic.ProductID,
+	})
+	if err != nil {
+		writeAppErr(c, err)
+		return
+	}
+
+	h.Store.Audit(c, &model.AuditLog{
+		Entity:    "license",
+		EntityID:  lic.ID,
+		Action:    "offline_token_issued",
+		ActorType: "admin",
+		ActorID:   adminID(c),
+		Changes: map[string]any{
+			"identifier": req.Identifier,
+			"label":      req.Label,
+			"status":     res.Status,
+		},
+	})
+
+	response.OK(c, gin.H{
+		"token":      res.Token,
+		"status":     res.Status,
+		"license_id": lic.ID,
+		"identifier": req.Identifier,
 	})
 }
 

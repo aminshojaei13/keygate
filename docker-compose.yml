@@ -1,7 +1,7 @@
 services:
   keygate:
-    image: ghcr.io/tabloy/keygate:latest
-    # build: .  # uncomment to build from source
+    # image: ghcr.io/tabloy/keygate:latest
+    build: .
     ports:
       - "${PORT:-9000}:9000"
     # Everything in .env reaches the container (storage, release keys,

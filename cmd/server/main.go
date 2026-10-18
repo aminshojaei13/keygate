@@ -426,6 +426,7 @@ func main() {
 	expiryChecker := service.NewExpiryChecker(db, emailSvc, webhookSvc, logger)
 	meteredSyncer := service.NewMeteredBillingSyncer(db, logger)
 	adminH := handler.NewAdminHandler(db, webhookSvc, emailSvc, expiryChecker, meteredSyncer)
+	adminH.LicenseSvc = licenseSvc
 	// An update period may only be written once the links a public
 	// feed handed out have expired, and this is how long they live.
 	// The admin API and the fulfilment guard measure the same wait
@@ -1214,6 +1215,7 @@ func main() {
 		licWrite.GET("/licenses/:id/floating", adminH.ListFloatingSessions)
 
 		licWrite.POST("/licenses/:id/transfer", adminH.TransferLicense)
+		licWrite.POST("/licenses/:id/offline-token", adminH.IssueOfflineToken)
 
 		licWrite.POST("/activations/:id/deactivate", adminH.DeactivateActivation)
 		licWrite.POST("/activations/:id/reactivate", adminH.ReactivateActivation)
