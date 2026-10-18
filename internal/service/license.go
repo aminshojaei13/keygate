@@ -51,16 +51,17 @@ func (s *LicenseService) SigningPublicKey() ed25519.PublicKey {
 // ─── Activate ───
 
 type ActivateInput struct {
-	LicenseKey     string
-	Identifier     string
-	IdentifierType string // "device" | "user"
-	Label          string
-	IPAddress      string
+	LicenseKey         string
+	Identifier         string
+	IdentifierType     string // "device" | "user"
+	Label              string
+	IPAddress          string
 	// ProductID: optional tenant scope. When non-empty the lookup
 	// rejects licenses that don't belong to it. Public SDK endpoints
 	// pass empty (license_key alone identifies tenant); server-to-server
 	// integrations may pass the product ID for explicit verification.
-	ProductID string
+	ProductID          string
+	PreviousIdentifier string // optional: for seamless migration from an older identifier scheme
 }
 
 type ActivateResult struct {
@@ -128,6 +129,36 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 			Token: token,
 			Meta:  responseMeta(),
 		}, nil
+	}
+
+	// Seamless version migration: if a client updates its identifier scheme
+	// and supplies its active previous identifier, migrate the activation in place
+	// without consuming an additional slot or returning ACTIVATION_LIMIT.
+	if in.PreviousIdentifier != "" && in.PreviousIdentifier != in.Identifier {
+		newScheme := model.DetectIdentifierScheme(in.Identifier)
+		migrated, mErr := s.store.MigrateActivationIdentifier(ctx, lic.ID, in.PreviousIdentifier, in.Identifier, newScheme)
+		if mErr == nil && migrated != nil {
+			s.store.Audit(ctx, &model.AuditLog{
+				Entity: "license", EntityID: lic.ID, Action: "migrated",
+				ActorType: "sdk", IPAddress: in.IPAddress,
+				Changes: map[string]any{
+					"from_identifier": in.PreviousIdentifier,
+					"to_identifier":   in.Identifier,
+					"scheme":          newScheme,
+				},
+			})
+			middleware.LicenseActivations.WithLabelValues(lic.ProductID, "migrated").Inc()
+			token, _, terr := s.signToken(ctx, lic, in.Identifier)
+			if terr != nil {
+				return nil, apperr.Internal(terr)
+			}
+			return &ActivateResult{
+				Status:    "activated",
+				LicenseID: lic.ID,
+				Token:     token,
+				Meta:      responseMeta(),
+			}, nil
+		}
 	}
 
 	max := s.maxActivations(lic)

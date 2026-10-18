@@ -453,15 +453,17 @@ const (
 
 // Identifier scheme labels recorded at activation time.
 const (
-	ActivationSchemeLegacy = "legacy"  // row predates scheme tracking
-	ActivationSchemeUUID   = "uuid"    // canonical UUID form
+	ActivationSchemeLegacy = "legacy"    // row predates scheme tracking
+	ActivationSchemeUUID   = "uuid"      // canonical UUID form
 	ActivationSchemeSHA256 = "sha256-v1" // sha256:<64 hex>
-	ActivationSchemeOpaque = "opaque"  // anything else, accepted as-is
+	ActivationSchemeKGIDv1 = "kgid-v1"   // kgid:v1:<platform>:<64 hex>
+	ActivationSchemeOpaque = "opaque"    // anything else, accepted as-is
 )
 
 var (
-	uuidShape = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	uuidShape   = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 	sha256Shape = regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`)
+	kgidShape   = regexp.MustCompile(`^kgid:v1:[a-z0-9_-]+:[0-9a-fA-F]{64}$`)
 )
 
 // DetectIdentifierScheme labels how an identifier is shaped. Pure
@@ -471,6 +473,8 @@ var (
 // because this label is computed server-side, never taken from input.
 func DetectIdentifierScheme(identifier string) string {
 	switch {
+	case kgidShape.MatchString(identifier):
+		return ActivationSchemeKGIDv1
 	case uuidShape.MatchString(identifier):
 		return ActivationSchemeUUID
 	case sha256Shape.MatchString(identifier):

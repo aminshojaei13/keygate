@@ -2148,6 +2148,70 @@ func (s *Store) ActivateWithinLimit(ctx context.Context, act *model.Activation, 
 	}
 }
 
+// MigrateActivationIdentifier transitions an active activation record from an old identifier
+// representation (e.g. legacy or sha256-v1) to a new versioned identifier (e.g. kgid-v1)
+// in-place without releasing or re-consuming a license slot.
+func (s *Store) MigrateActivationIdentifier(ctx context.Context, licenseID, oldIdentifier, newIdentifier, newScheme string) (*model.Activation, error) {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Lock the license row to serialize mutations
+	_, err = tx.NewRaw("SELECT id FROM licenses WHERE id = ? FOR UPDATE", licenseID).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 1. Locate the existing active activation under oldIdentifier
+	oldAct := new(model.Activation)
+	err = tx.NewSelect().Model(oldAct).
+		Where("license_id = ? AND identifier = ? AND status = ?", licenseID, oldIdentifier, model.ActivationActive).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Check if newIdentifier already has an activation record on this license
+	existingNew := new(model.Activation)
+	err = tx.NewSelect().Model(existingNew).
+		Where("license_id = ? AND identifier = ?", licenseID, newIdentifier).
+		Scan(ctx)
+	if err == nil {
+		// New identifier already exists. If it's already active, deactivate the old one.
+		if existingNew.Status == model.ActivationActive {
+			_, _ = tx.NewUpdate().Model((*model.Activation)(nil)).
+				Set("status = ?, deactivated_at = now(), deactivated_reason = 'migrated'", model.ActivationDeactivated).
+				Where("id = ?", oldAct.ID).Exec(ctx)
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
+			return existingNew, nil
+		}
+		// If existingNew was deactivated, remove it so we don't hit the unique index on update
+		_, _ = tx.NewDelete().Model((*model.Activation)(nil)).Where("id = ?", existingNew.ID).Exec(ctx)
+	}
+
+	// 3. Update the old activation in-place to the new identifier and scheme
+	_, err = tx.NewUpdate().Model((*model.Activation)(nil)).
+		Set("identifier = ?, scheme = ?, last_verified = now()", newIdentifier, newScheme).
+		Where("id = ?", oldAct.ID).
+		Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	oldAct.Identifier = newIdentifier
+	oldAct.Scheme = newScheme
+	oldAct.LastVerified = time.Now()
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return oldAct, nil
+}
+
 
 // ─── Email Queue ───
 

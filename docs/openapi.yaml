@@ -200,6 +200,10 @@ paths:
                   type: string
                   description: Human-readable name for the activation
                   example: "MacBook Pro"
+                previous_identifier:
+                  type: string
+                  description: Optional previous identifier when performing an in-place client scheme or algorithm migration
+                  example: "550e8400-e29b-41d4-a716-446655440000"
       responses:
         "200":
           description: Activation successful

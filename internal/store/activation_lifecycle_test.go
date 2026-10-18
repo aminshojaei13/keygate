@@ -34,6 +34,11 @@ func TestActivationLifecycle_MetadataAndScheme(t *testing.T) {
 			wantScheme: model.ActivationSchemeSHA256,
 		},
 		{
+			name:       "kgid identifier",
+			identifier: "kgid:v1:darwin:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7",
+			wantScheme: model.ActivationSchemeKGIDv1,
+		},
+		{
 			name:       "opaque identifier",
 			identifier: "my-custom-host-id-1234",
 			wantScheme: model.ActivationSchemeOpaque,

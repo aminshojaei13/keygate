@@ -501,10 +501,15 @@ components:
         identifier:
           type: string
           maxLength: 256
-          description: "Today: free-form (trim, ≤256). PROPOSED canonical profile: UUIDv4/UUIDv7 or sha256:<64 hex> for NEW activations; legacy rows grandfathered."
-          example: "550e8400-e29b-41d4-a716-446655440000"
+          description: "Canonical device identifier: kgid:v1:<platform>:<64 hex>, sha256:<64 hex>, canonical UUIDv4/UUIDv7, or legacy string for grandfathered activations."
+          example: "kgid:v1:darwin:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
         identifier_type: { type: string, enum: [device, user], default: device }
         label: { type: string, maxLength: 256, example: "Workstation" }
+        previous_identifier:
+          type: string
+          maxLength: 256
+          description: "Optional previous identifier for in-place client scheme or algorithm migration without consuming additional slots."
+          example: "550e8400-e29b-41d4-a716-446655440000"
 
     TokenClaims:
       type: object

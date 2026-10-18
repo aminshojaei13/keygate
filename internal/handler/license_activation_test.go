@@ -549,3 +549,118 @@ func TestAdminActivation_DeactivateAndReactivate(t *testing.T) {
 		t.Errorf("error code = %v, want ACTIVATION_LIMIT", resp["error"])
 	}
 }
+
+func TestLicenseActivation_VersionedIdentifierKGID(t *testing.T) {
+	h := setupActivationHarness(t, 2)
+	lic := h.createLicense(t, "kgid@example.com", model.StatusActive, nil)
+
+	identKGID := "kgid:v1:darwin:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
+	code, resp := h.postActivate(map[string]any{
+		"license_key": lic.LicenseKey,
+		"identifier":  identKGID,
+		"label":       "Darwin M3 Workstation",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("kgid activate code = %d, resp = %v", code, resp)
+	}
+
+	data := resp["data"].(map[string]any)
+	if data["status"] != "activated" {
+		t.Errorf("status = %v, want activated", data["status"])
+	}
+
+	ctx := context.Background()
+	act, err := h.store.FindActivation(ctx, lic.ID, identKGID)
+	if err != nil {
+		t.Fatalf("find activation: %v", err)
+	}
+	if act.Scheme != model.ActivationSchemeKGIDv1 {
+		t.Errorf("scheme = %q, want %q", act.Scheme, model.ActivationSchemeKGIDv1)
+	}
+}
+
+func TestLicenseActivation_InvalidIdentifierFormats(t *testing.T) {
+	h := setupActivationHarness(t, 2)
+	lic := h.createLicense(t, "invalid_fmt@example.com", model.StatusActive, nil)
+
+	invalids := []string{
+		"   ",
+		"device with spaces",
+		"kgid:v1:darwin:tooshort",
+		"kgid:v999:unknown:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7",
+		"sha256:not-sixty-four-hex",
+		"uuid:malformed-uuid",
+		strings.Repeat("a", 257),
+	}
+
+	for _, inv := range invalids {
+		code, resp := h.postActivate(map[string]any{
+			"license_key": lic.LicenseKey,
+			"identifier":  inv,
+		})
+		if code != http.StatusBadRequest {
+			t.Errorf("expected 400 for identifier %q, got %d (resp: %v)", inv, code, resp)
+		}
+	}
+}
+
+func TestLicenseActivation_VersionMigrationWithPreviousIdentifier(t *testing.T) {
+	// Plan with max=1 activation to test that migration does not exhaust slots
+	h := setupActivationHarness(t, 1)
+	lic := h.createLicense(t, "migration@example.com", model.StatusActive, nil)
+
+	oldUUID := "550e8400-e29b-41d4-a716-446655440000"
+	newKGID := "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
+
+	// 1. Initial activation with old UUID
+	code, resp := h.postActivate(map[string]any{
+		"license_key": lic.LicenseKey,
+		"identifier":  oldUUID,
+		"label":       "Old Windows PC",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("initial activate code = %d", code)
+	}
+
+	// 2. Client upgrades to kgid-v1 and sends previous_identifier
+	// Even though max=1 is currently full, migration must succeed in-place!
+	code, resp = h.postActivate(map[string]any{
+		"license_key":         lic.LicenseKey,
+		"identifier":          newKGID,
+		"previous_identifier": oldUUID,
+		"label":               "Upgraded Windows PC",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("migration activate code = %d, want 200: %v", code, resp)
+	}
+	data := resp["data"].(map[string]any)
+	if data["status"] != "activated" {
+		t.Errorf("status = %v, want activated", data["status"])
+	}
+
+	// Active slot count in database must remain exactly 1
+	ctx := context.Background()
+	count, err := h.store.CountActivations(ctx, lic.ID)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("active count = %d, want 1", count)
+	}
+
+	// The old UUID must no longer be found as active
+	_, err = h.store.FindActivation(ctx, lic.ID, oldUUID)
+	if err == nil {
+		t.Error("old identifier should no longer be active")
+	}
+
+	// The new KGID must be active with scheme kgid-v1
+	newAct, err := h.store.FindActivation(ctx, lic.ID, newKGID)
+	if err != nil {
+		t.Fatalf("find new activation: %v", err)
+	}
+	if newAct.Scheme != model.ActivationSchemeKGIDv1 {
+		t.Errorf("new scheme = %q, want %q", newAct.Scheme, model.ActivationSchemeKGIDv1)
+	}
+}
+
