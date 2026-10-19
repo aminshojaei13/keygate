@@ -248,7 +248,7 @@ curl http://localhost:9000/api/v1/license/pubkey
       </div>
 
       {/* Security Boundary Notice */}
-      <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20">
+      <Card className="border-amber-400 bg-amber-100/80 dark:border-amber-600/70 dark:bg-amber-900/30">
         <CardContent className="pt-6">
           <div className="flex gap-3 items-start">
             <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
