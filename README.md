@@ -15,7 +15,15 @@ The self-hosted alternative to Keygen, Cryptlex, and LicenseSpring.
 [![Stars](https://img.shields.io/github/stars/tabloy/keygate?style=flat)](https://github.com/tabloy/keygate/stargazers)
 [![Sponsor](https://img.shields.io/badge/sponsor-❤-ff69b4)](https://ko-fi.com/alanisme)
 
-**[English](README.md)** · **[简体中文](README.zh-CN.md)**
+**[English](README.md)** · **[简体中文](README.zh-CN.md)** · **[فارسی](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/team-guide/README.md)**
+
+<br />
+
+> **Fork:** [`aminshojaei13/keygate`](https://github.com/aminshojaei13/keygate) — a fork of
+> [`tabloy/keygate`](https://github.com/tabloy/keygate). Active work lives on the
+> [`security-enhancements`](https://github.com/aminshojaei13/keygate/tree/security-enhancements)
+> branch; `main` tracks upstream. See [What's in this fork](#whats-in-this-fork) below.
+
 
 <br />
 
@@ -92,32 +100,135 @@ A Go server + PostgreSQL + (optional) S3-compatible storage for release artifact
 
 ## Quick Start
 
-### Docker (recommended)
+**Requirements:** Docker 24+ and Docker Compose v2.24+ (the compose file uses
+`env_file: required: false`). Nothing else is needed — Go, Node and PostgreSQL all run inside
+containers.
+
+### 1. Clone
 
 ```bash
-# 1. Download
-curl -O https://raw.githubusercontent.com/tabloy/keygate/main/docker-compose.yml
-curl -O https://raw.githubusercontent.com/tabloy/keygate/main/.env.example
+git clone https://github.com/aminshojaei13/keygate.git
+cd keygate
+
+# Optional: the fork's newest work (device identity, offline tokens,
+# integrity manifests, admin Devices/Integration pages, SDK samples)
+git switch security-enhancements
+```
+
+### 2. Generate config and secrets
+
+```bash
 cp .env.example .env
-
-# 2. Set your secrets
-# Edit .env: set JWT_SECRET and LICENSE_SIGNING_KEY (openssl rand -hex 32)
-
-# 3. Run
-docker compose up -d
+sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -hex 32)|" .env && rm -f .env.bak
+sed -i.bak "s|^LICENSE_SIGNING_KEY=.*|LICENSE_SIGNING_KEY=$(openssl rand -hex 32)|" .env && rm -f .env.bak
 ```
 
-### From source
+Optional, but recommended: set `ADMIN_EMAILS=you@example.com` in `.env`. When it is set, only
+that address can claim the first-run owner account.
+
+### 3. Build and start
 
 ```bash
-git clone https://github.com/tabloy/keygate.git
-cd keygate && cp .env.example .env
-make build && ./bin/keygate
+docker compose up -d --build
 ```
 
-Open **http://localhost:9000** — the setup wizard guides you from there.
+`docker-compose.override.yml` builds the image from this checkout (instead of pulling the
+upstream image), so the code you cloned is the code that runs.
 
-> 📖 Full docs, deployment guides, and SDK examples at **[keygate.app/docs](https://keygate.app/docs)**
+### 4. Open the app
+
+<http://localhost:9000> — the setup wizard creates the owner, product and default plan.
+
+First login uses an email OTP. Without SMTP configured, the code is printed in the logs:
+
+```bash
+docker compose logs -f keygate | grep -i otp
+```
+
+Health check and useful commands:
+
+```bash
+curl -s http://localhost:9000/health
+docker compose logs -f keygate     # follow logs
+docker compose down                # stop (data is kept)
+git pull && docker compose up -d --build   # update
+docker compose down -v             # ⚠️ stop AND delete the database volume
+```
+
+### From source (optional)
+
+Use this only if you want to run the binaries directly. You need Go 1.27+, Bun/Node for the
+frontend, and PostgreSQL 18.
+
+```bash
+# 1. PostgreSQL (the compose file does not publish a host port)
+docker run -d --name keygate-pg -p 5432:5432 \
+  -e POSTGRES_USER=keygate -e POSTGRES_PASSWORD=keygate -e POSTGRES_DB=keygate \
+  postgres:18-alpine
+
+# 2. Config (same secret generation as above)
+cp .env.example .env
+sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -hex 32)|" .env && rm -f .env.bak
+sed -i.bak "s|^LICENSE_SIGNING_KEY=.*|LICENSE_SIGNING_KEY=$(openssl rand -hex 32)|" .env && rm -f .env.bak
+
+# 3. Build and run
+make build
+./bin/keygate
+```
+
+Open <http://localhost:9000> (migrations run automatically on startup).
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `Set JWT_SECRET in .env` / `LICENSE_SIGNING_KEY` | Run step 2 again; the lines must not be empty. |
+| Port 9000 already in use | Stop the other service, or change `ports` to `"9001:9000"` in `docker-compose.override.yml`. |
+| `SETUP_EMAIL_NOT_ALLOWED` | The setup email must be listed in `ADMIN_EMAILS` (or clear `ADMIN_EMAILS`). |
+| No login email | Check `docker compose logs -f keygate | grep -i otp`, or configure SMTP in `.env`. |
+| Reset everything (destructive) | `docker compose down -v` then repeat step 3. |
+| Behind a reverse proxy | Set `BASE_URL=https://your.domain` in `.env` and terminate TLS at the proxy. |
+
+<br />
+
+## What's in this fork
+
+The [`security-enhancements`](https://github.com/aminshojaei13/keygate/tree/security-enhancements)
+branch adds, on top of upstream:
+
+- **Device identity protocol** (`kgid:v1`) with scheme detection, drift scoring, and safe
+  identifier migration via `previous_identifier`.
+- **Activation lifecycle**: soft-delete tombstones plus admin deactivate/reactivate, license
+  transfer, and signed offline-token issuance.
+- **Offline tokens** with `ver`/`kid` and key rotation, discoverable at
+  `GET /api/v1/license/pubkey` and `GET /api/v1/releases/:product_slug/signing-key`.
+- **Signed integrity manifests** (`keygate-integrity-v1`) with `cmd/keygate-manifest`
+  (`create` / `verify` / `inspect`).
+- **Admin UI**: Devices page, Integration page, offline-token inspector, and expanded license
+  actions.
+- **Client samples**: C# for .NET 8 and .NET Core 3.1, a dependency-free Python SDK, and
+  Python/TypeScript examples.
+- **Documentation**: a 13-file Persian team guide plus protocol specifications.
+
+<br />
+
+## Documentation
+
+| Guide | What it covers |
+|---|---|
+| [**Persian team guide**](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/team-guide/README.md) | Setup, architecture, security, deployment, troubleshooting (فارسی) |
+| [API reference — all 151 routes](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/team-guide/api-reference.md) | Every registered endpoint with a uniform field table |
+| [C# / .NET integration](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/team-guide/csharp-dotnet-integration.md) | Activation, verification, offline tokens, samples |
+| [C# samples](https://github.com/aminshojaei13/keygate/tree/security-enhancements/examples/dotnet) | `Keygate.Sample` (net8.0) and `Keygate.Sample.NetCore31` |
+| [Python SDK](https://github.com/aminshojaei13/keygate/tree/security-enhancements/sdk/python) | Zero-dependency client, offline verifier, manifest verifier |
+| [Device identity spec](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/device-identity.md) | `kgid:v1`, drift scoring, migration |
+| [Offline licensing spec](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/offline-licensing.md) | Token format, claims, verification rules |
+| [Integrity manifest spec](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/integrity-manifest-format.md) | Envelope, canonicalization, signing |
+| [Deployment & configuration](https://github.com/aminshojaei13/keygate/tree/security-enhancements/docs) | Production install, backups, key management |
+| [keygate.app/docs](https://keygate.app/docs) | Upstream public documentation |
+
+> All `docs/team-guide/*` links point at the `security-enhancements` branch. Once that branch is
+> merged into `main`, they can be relative paths again.
 
 <br />
 
