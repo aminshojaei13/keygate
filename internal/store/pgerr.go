@@ -25,6 +25,13 @@ func isUniqueViolation(err error) bool {
 	return false
 }
 
+// isLockTimeout reports whether err is a wait that lock_timeout ended
+// (SQLSTATE 55P03).
+func isLockTimeout(err error) bool {
+	var pgErr pgdriver.Error
+	return errors.As(err, &pgErr) && pgErr.Field('C') == "55P03"
+}
+
 // isUniqueViolationNamed reports whether err is a Postgres unique_violation
 // (SQLSTATE 23505) raised by an index or constraint whose name contains name.
 func isUniqueViolationNamed(err error, name string) bool {
