@@ -1,0 +1,8 @@
+# Local development override: build the image from this checkout instead of
+# pulling ghcr.io/tabloy/keygate:latest, so the fork's code is what runs.
+# `docker compose up -d --build` uses this automatically.
+services:
+  keygate:
+    image: keygate:local
+    build:
+      context: .
