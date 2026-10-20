@@ -138,6 +138,7 @@ Open **http://localhost:9000** — the setup wizard guides you through first-run
 
 For production self-hosting, review the operational guides in the repository:
 
+- 📚 **[Team Guide (فارسی)](docs/team-guide/README.md)** — Full Persian handbook: setup, architecture, all **151** API routes, security, offline licensing, releases/integrity, C#/.NET & Python/TypeScript integration, deployment and troubleshooting.
 - 📖 **[Production Installation & Reverse Proxy Guide](docs/installation.md)** — Caddy/Nginx TLS 1.3 configuration, hardware sizing, container hardening.
 - ⚙️ **[Configuration & Secrets Reference](docs/configuration.md)** — Complete environment variable specification, entropy rules, and RBAC matrix.
 - 🔄 **[Upgrade, Migration & Rollback Runbook](docs/upgrade-and-rollback.md)** — Version upgrade procedures, advisory locks, irreversible migration warnings, and rollback protocols.
