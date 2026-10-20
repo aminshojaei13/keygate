@@ -1,0 +1,175 @@
+{
+  "$schema": "../docs/schemas/device-identity.schema.json",
+  "version": 1,
+  "description": "Platform-independent synthetic test fixtures for the Keygate Device Identity Protocol.",
+  "stable_identifiers": [
+    {
+      "name": "macos_workstation_synthetic",
+      "platform": "darwin",
+      "raw_components": {
+        "board": "2A55D68B-0B28-5778-9B55-48EE8A64BD2B",
+        "os": "24B91",
+        "disk": "B7E72B6F-27B4-4B32-841D-2EE6C7F19E3A",
+        "cpu": "Apple M3 Max (16 cores)",
+        "nic": "3c:22:fb:1a:2b:3c"
+      },
+      "expected_component_hashes": {
+        "board": "b9095f1fd0f9842570d83b484c3b51d14b7e2b7492424195f9b3a3838cf9fb47",
+        "os": "be81e5d2664075cd3ac6ddde4bf1c1338fc726828a0e8813a25aa8b0d1a3a442",
+        "disk": "0f52afefbc5b0a4fb9abba8f518b098d91d999b987a639a889ff0cf23df2651d",
+        "cpu": "138b2a9a431dab59d2f6556b772620588ee01b1ce33c3f71feb6cd9e945ea40f",
+        "nic": "ec57cc1381b817678d45e6df56e08abae759b3e31b3b102fa4551324bc578186"
+      },
+      "expected_composite_digest": "5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7",
+      "expected_kgid": "kgid:v1:darwin:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
+    },
+    {
+      "name": "windows_desktop_synthetic",
+      "platform": "windows",
+      "raw_components": {
+        "board": "85966B38-4F1E-47C0-8B90-D09D5C58A59C",
+        "os": "4B53D32B-98F1-4E65-B62C-08FB5BDE45A8",
+        "disk": "VOL-87A4-9E21",
+        "cpu": "Intel(R) Core(TM) i9-14900K",
+        "nic": "00:15:5d:02:44:88"
+      },
+      "expected_kgid_prefix": "kgid:v1:windows:"
+    },
+    {
+      "name": "linux_server_synthetic",
+      "platform": "linux",
+      "raw_components": {
+        "board": "472dd962-d492-494b-9728-6625aa370e0f",
+        "os": "4a0889fb31df4a78a63dc7816027e85d",
+        "disk": "e963bc1a-6c58-48fe-8926-d6eec4310555",
+        "cpu": "AMD EPYC 9654 96-Core Processor",
+        "nic": "52:54:00:12:34:56"
+      },
+      "expected_kgid_prefix": "kgid:v1:linux:"
+    }
+  ],
+  "missing_characteristics": [
+    {
+      "name": "ios_privacy_restricted_environment",
+      "platform": "ios",
+      "available_components": {
+        "board": "a4b2c1d3-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "os": "65646E56-4338-4A19-9430-80E1C55BCB0E"
+      },
+      "missing_components": ["disk", "cpu", "nic"],
+      "expected_drift_score_vs_self": 100,
+      "expected_decision": "accept_same_device"
+    },
+    {
+      "name": "browser_sandbox_environment",
+      "platform": "browser",
+      "available_components": {
+        "os": "web-anchor-550e8400-e29b-41d4-a716-446655440000"
+      },
+      "missing_components": ["board", "disk", "cpu", "nic"],
+      "expected_drift_score_vs_self": 100,
+      "expected_decision": "accept_same_device"
+    }
+  ],
+  "changed_characteristics": [
+    {
+      "name": "nic_adapter_change_wifi_switch",
+      "changed_components": ["nic"],
+      "component_weight_delta": 10,
+      "expected_drift_score": 90,
+      "expected_decision": "accept_same_device"
+    },
+    {
+      "name": "disk_replacement_ssd_upgrade",
+      "changed_components": ["disk"],
+      "component_weight_delta": 20,
+      "expected_drift_score": 80,
+      "expected_decision": "accept_same_device"
+    },
+    {
+      "name": "os_reinstall_new_install_id",
+      "changed_components": ["os"],
+      "component_weight_delta": 25,
+      "expected_drift_score": 75,
+      "expected_decision": "accept_same_device"
+    },
+    {
+      "name": "motherboard_replacement_rma",
+      "changed_components": ["board"],
+      "component_weight_delta": 35,
+      "expected_drift_score": 65,
+      "expected_decision": "accept_same_device"
+    },
+    {
+      "name": "motherboard_and_disk_replaced_ambiguous",
+      "changed_components": ["board", "disk"],
+      "component_weight_delta": 55,
+      "expected_drift_score": 45,
+      "expected_decision": "review_ambiguous"
+    },
+    {
+      "name": "complete_system_swap_different_machine",
+      "changed_components": ["board", "os", "disk", "cpu", "nic"],
+      "component_weight_delta": 100,
+      "expected_drift_score": 0,
+      "expected_decision": "reject_different_device"
+    }
+  ],
+  "version_migration": [
+    {
+      "name": "legacy_to_kgid_migration",
+      "old_identifier": "legacy-workstation-host1",
+      "old_scheme": "opaque",
+      "new_identifier": "kgid:v1:darwin:481cbbca4fe83fca3eb27e69c6cf2604da571e1948332152862a98f1aa8f48fc",
+      "new_scheme": "kgid-v1",
+      "expected_action": "migrated_in_place",
+      "expected_slot_consumption_delta": 0
+    },
+    {
+      "name": "sha256_to_kgid_migration",
+      "old_identifier": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "old_scheme": "sha256-v1",
+      "new_identifier": "kgid:v1:windows:481cbbca4fe83fca3eb27e69c6cf2604da571e1948332152862a98f1aa8f48fc",
+      "new_scheme": "kgid-v1",
+      "expected_action": "migrated_in_place",
+      "expected_slot_consumption_delta": 0
+    }
+  ],
+  "invalid_identifier_formats": [
+    { "input": "", "reason": "empty string" },
+    { "input": "   ", "reason": "whitespace only" },
+    { "input": "device\u0000nullbyte", "reason": "control characters" },
+    { "input": "device with space", "reason": "illegal space" },
+    { "input": "kgid:v1:darwin:short", "reason": "incomplete hex digest" },
+    { "input": "kgid:v2:darwin:481cbbca4fe83fca3eb27e69c6cf2604da571e1948332152862a98f1aa8f48fc", "reason": "unsupported scheme version" },
+    { "input": "kgid:v1:unsupported_os:481cbbca4fe83fca3eb27e69c6cf2604da571e1948332152862a98f1aa8f48fc", "reason": "unrecognized platform" },
+    { "input": "sha256:not-64-hex", "reason": "invalid sha256 hex" },
+    { "input": "uuid:1234-invalid", "reason": "invalid prefixed uuid" }
+  ],
+  "cloned_client_state": {
+    "description": "Simulation of disk image cloned to a distinct physical host.",
+    "host_a": {
+      "board": "BOARD-ALPHA",
+      "cpu": "CPU-ALPHA",
+      "disk": "CLONED-DISK-UUID-1234",
+      "os": "CLONED-OS-INSTALL-5678",
+      "nic": "00:50:56:01:02:03"
+    },
+    "host_b_clone": {
+      "board": "BOARD-BETA",
+      "cpu": "CPU-BETA",
+      "disk": "CLONED-DISK-UUID-1234",
+      "os": "CLONED-OS-INSTALL-5678",
+      "nic": "00:50:56:09:08:07"
+    },
+    "expected_drift_score": 45,
+    "expected_decision": "review_ambiguous"
+  },
+  "cryptographic_proof_of_possession": {
+    "algorithm": "ed25519",
+    "seed_hex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+    "public_key_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+    "challenge": "keygate:auth:challenge:synthetic_nonce_42:ts_1795000000",
+    "signature_base64url": "2HhX1L5K1YlFsmR12QyqKkW2-Fh3-zUjQ6ZlG5y7z9n6lW1tX8jR3mP5qY4sT7vW0aZ2bC3dE4fG5hJ6kL7mPQ"
+  }
+}

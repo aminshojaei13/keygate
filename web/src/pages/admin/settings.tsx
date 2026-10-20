@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowUpCircle, Check, RefreshCw, Send, Shield, Trash2, UserPlus } from "lucide-react"
+import { ArrowUpCircle, Check, Copy, Database, KeyRound, RefreshCw, Send, Shield, Trash2, UserPlus } from "lucide-react"
 import { useEffect, useState } from "react"
 import { DEFAULT_REMINDER_DAYS, ReminderDaysInput } from "@/components/reminder-days-input"
 import { showToast } from "@/components/toast"
@@ -239,6 +239,25 @@ export default function SettingsPage() {
     queryFn: admin.checkUpdate,
     staleTime: 60 * 60 * 1000, // cache 1 hour
   })
+
+  const [keyCopied, setKeyCopied] = useState(false)
+  const { data: signingKeyData } = useQuery({
+    queryKey: ["admin", "license-public-key"],
+    queryFn: admin.getLicensePublicKey,
+  })
+
+  const { data: migrationData } = useQuery({
+    queryKey: ["admin", "migration-status"],
+    queryFn: admin.getMigrationStatus,
+  })
+
+  const copyPublicKey = (keyText?: string) => {
+    if (!keyText) return
+    navigator.clipboard.writeText(keyText)
+    setKeyCopied(true)
+    showToast(t("settings.publicKeyCopied"), "success")
+    setTimeout(() => setKeyCopied(false), 2000)
+  }
 
   const set = (key: FormKey, value: string) => setForm((f) => ({ ...f, [key]: value }))
   // The provider drives which fields show. Falls back to what the
@@ -612,6 +631,59 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="security" className="space-y-6">
+          {/* License Token Signing Key */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <KeyRound className="h-4 w-4" />
+                {t("settings.signingKeyTitle")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">{t("settings.signingKeyDesc")}</p>
+              <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+                <div>
+                  <p className="text-muted-foreground">{t("settings.signingKeyAlgorithm")}</p>
+                  <p className="font-mono mt-1 font-semibold">{signingKeyData?.algorithm || "Ed25519"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">{t("settings.signingKeyId")}</p>
+                  <p className="font-mono mt-1 truncate font-semibold" title={signingKeyData?.kid || "default"}>
+                    {signingKeyData?.kid || "default"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">{t("settings.signingKeyFormat")}</p>
+                  <p className="mt-1">{signingKeyData?.format || "RFC 8037 JWK / Ed25519"}</p>
+                </div>
+              </div>
+
+              {signingKeyData?.public_key && (
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">{t("settings.signingKeyTitle")}</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => copyPublicKey(signingKeyData.public_key)}
+                    >
+                      {keyCopied ? <Check className="h-3 w-3 mr-1 text-emerald-600" /> : <Copy className="h-3 w-3 mr-1" />}
+                      {t("settings.copyPublicKey")}
+                    </Button>
+                  </div>
+                  <pre className="text-xs font-mono bg-muted p-3 rounded-lg overflow-x-auto break-all whitespace-pre-wrap select-all">
+                    {signingKeyData.public_key}
+                  </pre>
+                </div>
+              )}
+
+              <div className="rounded bg-muted/60 p-3 text-xs text-muted-foreground">
+                {t("settings.signingKeyNotice")}
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t("settings.signup")}</CardTitle>
@@ -777,6 +849,45 @@ export default function SettingsPage() {
                   <pre className="text-xs bg-muted rounded-lg p-4 overflow-auto max-h-48 whitespace-pre-wrap">
                     {updateData.changelog}
                   </pre>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Database Schema Migrations */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                {t("settings.migrationsTitle")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">{t("settings.migrationsDesc")}</p>
+              {!migrationData?.migrations || migrationData.migrations.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4 text-center bg-muted/40 rounded">
+                  {t("settings.noMigrations")}
+                </p>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-muted/70 text-muted-foreground border-b">
+                        <tr>
+                          <th className="py-2 px-3 font-medium">{t("settings.migrationName") || "Migration Script"}</th>
+                          <th className="py-2 px-3 font-medium">{t("settings.migrationAppliedAt") || "Applied At"}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {migrationData.migrations.map((m) => (
+                          <tr key={m.filename} className="hover:bg-muted/30">
+                            <td className="py-2 px-3 font-mono font-medium">{m.filename}</td>
+                            <td className="py-2 px-3 text-muted-foreground">{m.applied_at || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </CardContent>

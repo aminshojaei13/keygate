@@ -1,0 +1,5 @@
+bin/
+obj/
+keygate-token.txt
+keygate-token.txt.pub.hex
+.DS_Store

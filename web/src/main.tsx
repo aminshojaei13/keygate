@@ -15,6 +15,8 @@ import APIKeysPage from "@/pages/admin/api-keys"
 import AuditPage from "@/pages/admin/audit"
 import CustomersPage from "@/pages/admin/customers"
 import DashboardPage from "@/pages/admin/dashboard"
+import DevicesPage from "@/pages/admin/devices"
+import IntegrationPage from "@/pages/admin/integration"
 import LicensesPage from "@/pages/admin/licenses"
 import PlansPage from "@/pages/admin/plans"
 import ProductsPage from "@/pages/admin/products"
@@ -62,8 +64,10 @@ createRoot(document.getElementById("root")!).render(
                       <Route path="plans" element={<PlansPage />} />
                       <Route path="releases" element={<ReleasesPage />} />
                       <Route path="licenses" element={<LicensesPage />} />
+                      <Route path="devices" element={<DevicesPage />} />
                       <Route path="api-keys" element={<APIKeysPage />} />
                       <Route path="webhooks" element={<WebhooksPage />} />
+                      <Route path="integration" element={<IntegrationPage />} />
                       <Route path="addons" element={<AddonsPage />} />
                       <Route path="analytics" element={<AnalyticsPage />} />
                       <Route path="audit" element={<AuditPage />} />

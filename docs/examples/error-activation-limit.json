@@ -1,0 +1,11 @@
+{
+  "success": false,
+  "error": {
+    "code": "ACTIVATION_LIMIT",
+    "message": "maximum activations reached",
+    "details": {
+      "max": 3,
+      "current": 3
+    }
+  }
+}

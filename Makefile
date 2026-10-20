@@ -70,12 +70,12 @@ seed: ## Seed database with demo data
 	$(GO) run ./cmd/seed
 
 .PHONY: db-backup
-db-backup: ## Backup database to backup.sql
+db-backup: ## Backup database from host environment
 	pg_dump "$${DATABASE_URL}" --no-owner --no-privileges > backup-$$(date +%Y%m%d-%H%M%S).sql
 	@echo "Backup saved to backup-*.sql"
 
 .PHONY: db-restore
-db-restore: ## Restore database from BACKUP=file.sql
+db-restore: ## Restore database from host environment (BACKUP=file.sql)
 	@test -n "$(BACKUP)" || (echo "Usage: make db-restore BACKUP=backup.sql" && exit 1)
 	psql "$${DATABASE_URL}" < $(BACKUP)
 	@echo "Restored from $(BACKUP)"
@@ -90,8 +90,29 @@ docker-build: ## Build Docker image locally
 		--build-arg BUILD_DATE=$(BUILD_DATE) .
 
 .PHONY: docker-up
-docker-up: ## Start with Docker Compose
+docker-up: ## Start with Docker Compose (production configuration)
 	docker compose up -d
+
+.PHONY: docker-dev
+docker-dev: ## Start with Docker Compose (development override with build and exposed DB)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
+.PHONY: docker-migrate
+docker-migrate: ## Run pending database migrations via container
+	docker compose run --rm keygate migrate
+
+.PHONY: docker-backup
+docker-backup: ## Take a database snapshot from running Docker container
+	@mkdir -p backups
+	@OUT="backups/backup-$$(date +%Y%m%d-%H%M%S).sql"; \
+	docker compose exec -T postgres pg_dump -U keygate --no-owner --no-privileges keygate > "$$OUT" && \
+	echo "Docker database backup successfully saved to $$OUT"
+
+.PHONY: docker-restore
+docker-restore: ## Restore database in Docker container (BACKUP=backups/file.sql)
+	@test -n "$(BACKUP)" || (echo "Usage: make docker-restore BACKUP=backups/file.sql" && exit 1)
+	docker compose exec -T postgres psql -U keygate -d keygate < $(BACKUP)
+	@echo "Restored container database from $(BACKUP)"
 
 .PHONY: docker-down
 docker-down: ## Stop Docker Compose

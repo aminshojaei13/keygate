@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://keygate.app/schemas/device-identity.schema.json",
+  "title": "KeygateDeviceIdentity",
+  "description": "Common Device Identity contract and platform fingerprint payload schema for the Keygate licensing ecosystem.",
+  "type": "object",
+  "required": ["identifier"],
+  "properties": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\s\\x00-\\x1f]+$",
+      "description": "Canonical device identifier. Supported schemes: kgid:v1:<platform>:<64hex>, sha256:<64hex>, canonical UUIDv4/v7, or legacy string."
+    },
+    "identifier_type": {
+      "type": "string",
+      "enum": ["device", "user"],
+      "default": "device",
+      "description": "Type of activation slot entity."
+    },
+    "previous_identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\s\\x00-\\x1f]+$",
+      "description": "Optional previous identifier presented during an in-place client scheme or algorithm migration."
+    },
+    "label": {
+      "type": "string",
+      "maxLength": 256,
+      "description": "Human-readable label for device display in customer self-service portal or admin panel."
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["darwin", "windows", "linux", "android", "ios", "browser", "other"],
+      "description": "Client operating system / execution environment."
+    },
+    "platform_version": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "OS release or build version (e.g. 15.0.1, 10.0.22631, 6.6.0)."
+    },
+    "architecture": {
+      "type": "string",
+      "enum": ["arm64", "x86_64", "x86", "arm", "other"],
+      "description": "CPU architecture."
+    },
+    "components": {
+      "type": "object",
+      "description": "Domain-separated SHA-256 digests of individual hardware characteristics. Raw hardware identifiers are never transmitted.",
+      "additionalProperties": false,
+      "properties": {
+        "board": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "SHA-256 of keygate:device:v1:board:<normalized_motherboard_or_system_uuid>"
+        },
+        "os": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "SHA-256 of keygate:device:v1:os:<normalized_os_install_or_machine_id>"
+        },
+        "disk": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "SHA-256 of keygate:device:v1:disk:<normalized_root_volume_or_disk_serial>"
+        },
+        "cpu": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "SHA-256 of keygate:device:v1:cpu:<normalized_processor_signature>"
+        },
+        "nic": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "SHA-256 of keygate:device:v1:nic:<normalized_primary_mac_address>"
+        }
+      }
+    },
+    "device_pubkey": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Optional Ed25519 or ECDSA public key (hex or base64url) backed by hardware storage (TPM / Secure Enclave)."
+    },
+    "device_proof": {
+      "type": "string",
+      "maxLength": 256,
+      "description": "Optional cryptographic signature over an auth challenge proving possession of device_pubkey."
+    }
+  }
+}

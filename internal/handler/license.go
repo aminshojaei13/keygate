@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -24,29 +23,44 @@ func NewLicenseHandler(svc *service.LicenseService) *LicenseHandler {
 
 func (h *LicenseHandler) Activate(c *gin.Context) {
 	var req struct {
-		LicenseKey     string `json:"license_key" binding:"required"`
-		Identifier     string `json:"identifier" binding:"required"`
-		IdentifierType string `json:"identifier_type"`
-		Label          string `json:"label"`
+		LicenseKey         string `json:"license_key" binding:"required"`
+		Identifier         string `json:"identifier" binding:"required"`
+		IdentifierType     string `json:"identifier_type"`
+		Label              string `json:"label"`
+		PreviousIdentifier string `json:"previous_identifier"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "license_key and identifier are required")
 		return
 	}
-	req.Identifier = strings.TrimSpace(req.Identifier)
-	if len(req.Identifier) > maxIdentifierLen {
-		response.BadRequest(c, "identifier too long")
+	if valErr := apperr.ValidateIdentifier(req.Identifier); valErr != nil {
+		writeAppErr(c, valErr)
+		return
+	}
+	if req.PreviousIdentifier != "" {
+		if valErr := apperr.ValidateIdentifier(req.PreviousIdentifier); valErr != nil {
+			writeAppErr(c, valErr)
+			return
+		}
+	}
+	if req.IdentifierType != "" && req.IdentifierType != "device" && req.IdentifierType != "user" {
+		response.BadRequest(c, "invalid identifier_type, must be device or user")
+		return
+	}
+	if len(req.Label) > maxIdentifierLen {
+		response.BadRequest(c, "label too long")
 		return
 	}
 
 	productID, _ := c.Get("product_id")
 	result, err := h.svc.Activate(c.Request.Context(), service.ActivateInput{
-		LicenseKey:     req.LicenseKey,
-		Identifier:     req.Identifier,
-		IdentifierType: req.IdentifierType,
-		Label:          req.Label,
-		IPAddress:      c.ClientIP(),
-		ProductID:      str(productID),
+		LicenseKey:         req.LicenseKey,
+		Identifier:         req.Identifier,
+		IdentifierType:     req.IdentifierType,
+		Label:              req.Label,
+		IPAddress:          c.ClientIP(),
+		ProductID:          str(productID),
+		PreviousIdentifier: req.PreviousIdentifier,
 	})
 	if err != nil {
 		writeAppErr(c, err)
@@ -64,9 +78,8 @@ func (h *LicenseHandler) Verify(c *gin.Context) {
 		response.BadRequest(c, "license_key and identifier are required")
 		return
 	}
-	req.Identifier = strings.TrimSpace(req.Identifier)
-	if len(req.Identifier) > maxIdentifierLen {
-		response.BadRequest(c, "identifier too long")
+	if valErr := apperr.ValidateIdentifier(req.Identifier); valErr != nil {
+		writeAppErr(c, valErr)
 		return
 	}
 
@@ -93,9 +106,8 @@ func (h *LicenseHandler) Deactivate(c *gin.Context) {
 		response.BadRequest(c, "license_key and identifier are required")
 		return
 	}
-	req.Identifier = strings.TrimSpace(req.Identifier)
-	if len(req.Identifier) > maxIdentifierLen {
-		response.BadRequest(c, "identifier too long")
+	if valErr := apperr.ValidateIdentifier(req.Identifier); valErr != nil {
+		writeAppErr(c, valErr)
 		return
 	}
 
