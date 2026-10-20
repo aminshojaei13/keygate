@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"golang.org/x/mod/semver"
+
+	"github.com/tabloy/keygate/pkg/deviceid"
 )
 
 // semverShape: a permissive prefilter to short-circuit obvious garbage
@@ -108,6 +110,25 @@ func ValidateHTTPURL(field, raw string) *AppError {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return BadRequest(field + " must be a full http(s) URL, such as https://example.com/download")
+	}
+	return nil
+}
+
+// ValidateIdentifier validates an incoming device or user activation identifier
+// against the Keygate device identity protocol rules.
+func ValidateIdentifier(identifier string) *AppError {
+	// Whitespace-only input is "missing", not malformed. Anything else
+	// is validated exactly as the caller sent it: the value that reaches
+	// the activation row is this same string, so trimming only here would
+	// validate a different identifier than the one stored.
+	if strings.TrimSpace(identifier) == "" {
+		return BadRequest("identifier is required")
+	}
+	if len(identifier) > 256 {
+		return BadRequest("identifier too long")
+	}
+	if err := deviceid.ValidateIdentifierFormat(identifier); err != nil {
+		return BadRequest("invalid identifier format: " + err.Error())
 	}
 	return nil
 }

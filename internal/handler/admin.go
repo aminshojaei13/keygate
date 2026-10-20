@@ -27,11 +27,12 @@ import (
 )
 
 type AdminHandler struct {
-	Store   *store.Store
-	Webhook *service.WebhookService
-	Email   *service.EmailService
-	Expiry  *service.ExpiryChecker
-	Metered *service.MeteredBillingSyncer
+	Store      *store.Store
+	Webhook    *service.WebhookService
+	Email      *service.EmailService
+	Expiry     *service.ExpiryChecker
+	Metered    *service.MeteredBillingSyncer
+	LicenseSvc *service.LicenseService
 	// FeedURLTTL is how long a presigned artifact URL inside a public
 	// update feed stays usable (STORAGE_FEED_URL_TTL). Gating a
 	// product's feeds does not reach links already handed out, so an
@@ -1278,6 +1279,7 @@ func (h *AdminHandler) UpdatePlan(c *gin.Context) {
 	if req.UpdatesDays != nil || req.RenewalDays != nil || req.StripeRenewalPriceID != nil || req.LicenseType != nil {
 		cols = append(cols, "updates_days", "renewal_days", "stripe_renewal_price_id")
 	}
+	prevMaxActivations := p.MaxActivations
 	if req.MaxActivations != nil {
 		p.MaxActivations = *req.MaxActivations
 		cols = append(cols, "max_activations")
@@ -1381,9 +1383,14 @@ func (h *AdminHandler) UpdatePlan(c *gin.Context) {
 		response.Internal(c, err)
 		return
 	}
+	planChanges := map[string]any{}
+	if req.MaxActivations != nil && *req.MaxActivations != prevMaxActivations {
+		planChanges["max_activations"] = map[string]any{"from": prevMaxActivations, "to": *req.MaxActivations}
+	}
 	h.Store.Audit(c, &model.AuditLog{
 		Entity: "plan", EntityID: p.ID, Action: "updated",
 		ActorType: "admin", ActorID: adminID(c),
+		Changes: planChanges,
 	})
 	response.OK(c, p)
 }
@@ -2741,6 +2748,159 @@ func (h *AdminHandler) UnlinkStripeSubscription(c *gin.Context) {
 	response.OK(c, gin.H{"status": "unlinked"})
 }
 
+func (h *AdminHandler) TransferLicense(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		NewEmail           string `json:"new_email" binding:"required"`
+		ReleaseActivations *bool  `json:"release_activations"`
+		Reason             string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "new_email is required")
+		return
+	}
+	req.NewEmail = strings.TrimSpace(req.NewEmail)
+	if err := apperr.ValidateEmail(req.NewEmail); err != nil {
+		response.Err(c, http.StatusBadRequest, "INVALID_INPUT", err.Error())
+		return
+	}
+	if len(req.Reason) > 256 {
+		response.BadRequest(c, "reason too long (max 256 characters)")
+		return
+	}
+
+	lic, err := h.Store.FindLicenseByID(c, id)
+	if err != nil {
+		response.NotFound(c, "license not found")
+		return
+	}
+	if !requireKeyProductScope(c, lic.ProductID) {
+		return
+	}
+
+	release := true
+	if req.ReleaseActivations != nil {
+		release = *req.ReleaseActivations
+	}
+
+	released, err := h.Store.TransferLicense(c, id, req.NewEmail, release)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "license not found")
+			return
+		}
+		if errors.Is(err, store.ErrIdenticalEmail) {
+			response.Err(c, http.StatusConflict, "IDENTICAL_EMAIL", "new_email is identical to current license email")
+			return
+		}
+		response.Internal(c, err)
+		return
+	}
+
+	h.Store.Audit(c, &model.AuditLog{
+		Entity: "license", EntityID: id, Action: "transferred",
+		ActorType: "admin", ActorID: adminID(c),
+		Changes: map[string]any{
+			"from_email":           lic.Email,
+			"to_email":             req.NewEmail,
+			"activations_released": released,
+			"reason":               req.Reason,
+		},
+	})
+
+	if h.Webhook != nil {
+		h.Webhook.Dispatch(c, lic.ProductID, "license.transferred", map[string]any{
+			"license_id":           id,
+			"from_email":           lic.Email,
+			"to_email":             req.NewEmail,
+			"activations_released": released,
+		})
+	}
+
+	response.OK(c, gin.H{
+		"status":               "transferred",
+		"license_id":           id,
+		"email":                req.NewEmail,
+		"activations_released": released,
+	})
+}
+
+// IssueOfflineToken issues an Ed25519-signed offline license token for a device on a license.
+func (h *AdminHandler) IssueOfflineToken(c *gin.Context) {
+	id := c.Param("id")
+	pid, err := h.Store.GetLicenseProductID(c, id)
+	if err != nil {
+		response.NotFound(c, "license not found")
+		return
+	}
+	if !requireKeyProductScope(c, pid) {
+		return
+	}
+
+	var req struct {
+		Identifier string `json:"identifier" binding:"required"`
+		Label      string `json:"label"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "identifier is required")
+		return
+	}
+	if valErr := apperr.ValidateIdentifier(req.Identifier); valErr != nil {
+		writeAppErr(c, valErr)
+		return
+	}
+
+	lic, err := h.Store.FindLicenseByID(c, id)
+	if err != nil {
+		response.NotFound(c, "license not found")
+		return
+	}
+
+	key := h.Store.DecryptLicenseKey(lic)
+	if key == "" {
+		response.Internal(c, errors.New("cannot decrypt license key"))
+		return
+	}
+
+	if h.LicenseSvc == nil {
+		response.Internal(c, errors.New("license service not initialized"))
+		return
+	}
+
+	res, err := h.LicenseSvc.Activate(c.Request.Context(), service.ActivateInput{
+		LicenseKey:     key,
+		Identifier:     req.Identifier,
+		IdentifierType: "device",
+		Label:          req.Label,
+		IPAddress:      c.ClientIP(),
+		ProductID:      lic.ProductID,
+	})
+	if err != nil {
+		writeAppErr(c, err)
+		return
+	}
+
+	h.Store.Audit(c, &model.AuditLog{
+		Entity:    "license",
+		EntityID:  lic.ID,
+		Action:    "offline_token_issued",
+		ActorType: "admin",
+		ActorID:   adminID(c),
+		Changes: map[string]any{
+			"identifier": req.Identifier,
+			"label":      req.Label,
+			"status":     res.Status,
+		},
+	})
+
+	response.OK(c, gin.H{
+		"token":      res.Token,
+		"status":     res.Status,
+		"license_id": lic.ID,
+		"identifier": req.Identifier,
+	})
+}
+
 func (h *AdminHandler) DeleteActivation(c *gin.Context) {
 	id := c.Param("id")
 	pid, err := h.Store.GetActivationProductID(c, id)
@@ -2756,14 +2916,14 @@ func (h *AdminHandler) DeleteActivation(c *gin.Context) {
 		response.NotFound(c, "activation not found")
 		return
 	}
-	if err := h.Store.DeleteActivationByID(c, id); err != nil {
+	if _, err := h.Store.SoftDeactivateActivation(c, id, "admin"); err != nil {
 		response.Internal(c, err)
 		return
 	}
 	h.Store.Audit(c, &model.AuditLog{
-		Entity: "activation", EntityID: id, Action: "deleted",
+		Entity: "activation", EntityID: id, Action: "deactivated",
 		ActorType: "admin", ActorID: adminID(c),
-		Changes: map[string]any{"license_id": act.LicenseID, "identifier": act.Identifier},
+		Changes: map[string]any{"license_id": act.LicenseID, "identifier": act.Identifier, "reason": "admin"},
 	})
 	if h.Webhook != nil {
 		h.Webhook.Dispatch(c, pid, "license.deactivated", map[string]any{
@@ -2771,6 +2931,96 @@ func (h *AdminHandler) DeleteActivation(c *gin.Context) {
 		})
 	}
 	response.NoContent(c)
+}
+
+func (h *AdminHandler) DeactivateActivation(c *gin.Context) {
+	id := c.Param("id")
+	pid, err := h.Store.GetActivationProductID(c, id)
+	if err != nil {
+		response.NotFound(c, "activation not found")
+		return
+	}
+	if !requireKeyProductScope(c, pid) {
+		return
+	}
+	act, err := h.Store.FindActivationByID(c, id)
+	if err != nil {
+		response.NotFound(c, "activation not found")
+		return
+	}
+	if _, err := h.Store.SoftDeactivateActivation(c, id, "admin"); err != nil {
+		response.Internal(c, err)
+		return
+	}
+	h.Store.Audit(c, &model.AuditLog{
+		Entity: "activation", EntityID: id, Action: "deactivated",
+		ActorType: "admin", ActorID: adminID(c),
+		Changes: map[string]any{"license_id": act.LicenseID, "identifier": act.Identifier, "reason": "admin"},
+	})
+	if h.Webhook != nil {
+		h.Webhook.Dispatch(c, pid, "license.deactivated", map[string]any{
+			"license_id": act.LicenseID, "identifier": act.Identifier,
+		})
+	}
+	response.OK(c, gin.H{"status": "deactivated", "id": id})
+}
+
+func (h *AdminHandler) ReactivateActivation(c *gin.Context) {
+	id := c.Param("id")
+	pid, err := h.Store.GetActivationProductID(c, id)
+	if err != nil {
+		response.NotFound(c, "activation not found")
+		return
+	}
+	if !requireKeyProductScope(c, pid) {
+		return
+	}
+	act, err := h.Store.FindActivationByID(c, id)
+	if err != nil {
+		response.NotFound(c, "activation not found")
+		return
+	}
+	if err := h.Store.ReactivateActivation(c, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "activation not found")
+			return
+		}
+		if errors.Is(err, store.ErrActivationLimit) || err.Error() == "activation limit reached" {
+			count, _ := h.Store.CountActivations(c, act.LicenseID)
+			lic, _ := h.Store.FindLicenseByID(c, act.LicenseID)
+			max := 0
+			if lic != nil && lic.Plan != nil {
+				max = lic.Plan.MaxActivations
+			}
+			response.ErrWithDetails(c, http.StatusConflict, "ACTIVATION_LIMIT", "maximum activations reached", map[string]any{"max": max, "current": count})
+			return
+		}
+		if strings.Contains(err.Error(), "revoked") {
+			response.Err(c, http.StatusForbidden, "LICENSE_REVOKED", "license is revoked")
+			return
+		}
+		if strings.Contains(err.Error(), "suspended") {
+			response.Err(c, http.StatusForbidden, "LICENSE_SUSPENDED", "license is suspended")
+			return
+		}
+		if strings.Contains(err.Error(), "expired") {
+			response.Err(c, http.StatusForbidden, "LICENSE_EXPIRED", "license is expired")
+			return
+		}
+		response.Internal(c, err)
+		return
+	}
+	h.Store.Audit(c, &model.AuditLog{
+		Entity: "activation", EntityID: id, Action: "reactivated",
+		ActorType: "admin", ActorID: adminID(c),
+		Changes: map[string]any{"license_id": act.LicenseID, "identifier": act.Identifier},
+	})
+	if h.Webhook != nil {
+		h.Webhook.Dispatch(c, pid, "license.activated", map[string]any{
+			"license_id": act.LicenseID, "identifier": act.Identifier,
+		})
+	}
+	response.OK(c, gin.H{"status": "reactivated", "id": id})
 }
 
 // ─── Audit Logs ───
@@ -3627,12 +3877,16 @@ func (h *AdminHandler) ChangeLicensePlan(c *gin.Context) {
 		return
 	}
 
+	planAuditChanges := changesWith(changesWith(
+		map[string]any{"old_plan_id": oldPlanID, "new_plan_id": req.PlanID},
+		"status", newStatus), "valid_until", newValidUntil)
+	if oldPlan.MaxActivations != plan.MaxActivations {
+		planAuditChanges["activation_limit"] = map[string]any{"from": oldPlan.MaxActivations, "to": plan.MaxActivations}
+	}
 	h.Store.Audit(c, &model.AuditLog{
 		Entity: "license", EntityID: id, Action: "plan_changed",
 		ActorType: "admin", ActorID: adminID(c),
-		Changes: changesWith(changesWith(
-			map[string]any{"old_plan_id": oldPlanID, "new_plan_id": req.PlanID},
-			"status", newStatus), "valid_until", newValidUntil),
+		Changes: planAuditChanges,
 	})
 
 	if h.Webhook != nil {

@@ -1023,7 +1023,13 @@ func (s *Store) ListLicensesByEmail(ctx context.Context, email string) ([]*model
 	// their length; floating seats live in their own table and need
 	// the extra query.
 	for _, l := range out {
-		l.ActivationCount = len(l.Activations)
+		activeCount := 0
+		for _, a := range l.Activations {
+			if a.Status == model.ActivationActive {
+				activeCount++
+			}
+		}
+		l.ActivationCount = activeCount
 	}
 	if err := s.fillFloatingCounts(ctx, out); err != nil {
 		return nil, err
@@ -1192,7 +1198,7 @@ func (s *Store) fillActivationCounts(ctx context.Context, licenses []*model.Lice
 	err := s.DB.NewSelect().Model((*model.Activation)(nil)).
 		ColumnExpr("license_id").
 		ColumnExpr("count(*) AS n").
-		Where("license_id IN (?)", bun.List(ids)).
+		Where("license_id IN (?) AND status = ?", bun.List(ids), model.ActivationActive).
 		GroupExpr("license_id").
 		Scan(ctx, &rows)
 	if err != nil {
@@ -1251,7 +1257,11 @@ func (s *Store) CreateActivation(ctx context.Context, a *model.Activation) error
 func (s *Store) FindActivation(ctx context.Context, licenseID, identifier string) (*model.Activation, error) {
 	a := new(model.Activation)
 	return a, s.DB.NewSelect().Model(a).
-		Where("license_id = ? AND identifier = ?", licenseID, identifier).Scan(ctx)
+		// Deactivated devices are tombstones: they must not look like live
+		// activations to verify, otherwise a deactivated device keeps
+		// receiving tokens.
+		Where("license_id = ? AND identifier = ? AND status = ?",
+			licenseID, identifier, model.ActivationActive).Scan(ctx)
 }
 
 func (s *Store) TouchActivation(ctx context.Context, id string) error {
@@ -1260,14 +1270,34 @@ func (s *Store) TouchActivation(ctx context.Context, id string) error {
 	return err
 }
 
+// SoftDeactivateActivation releases a device's slot while keeping the
+// record for inspection ("who is on my license" history, transfer
+// audits). Idempotent: only an active device can be deactivated, so a
+// double-submit answers false with no change. Returns whether this
+// call performed the deactivation.
+func (s *Store) SoftDeactivateActivation(ctx context.Context, id, reason string) (bool, error) {
+	res, err := s.DB.NewUpdate().Model((*model.Activation)(nil)).
+		Set("status = ?, deactivated_at = now(), deactivated_reason = ?",
+			model.ActivationDeactivated, reason).
+		Where("id = ? AND status = ?", id, model.ActivationActive).
+		Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
+}
+
 func (s *Store) DeleteActivation(ctx context.Context, id string) error {
 	_, err := s.DB.NewDelete().Model((*model.Activation)(nil)).Where("id = ?", id).Exec(ctx)
 	return err
 }
 
+// CountActivations counts slot-consuming devices only: deactivated
+// tombstones do not hold slots.
 func (s *Store) CountActivations(ctx context.Context, licenseID string) (int, error) {
 	return s.DB.NewSelect().Model((*model.Activation)(nil)).
-		Where("license_id = ?", licenseID).Count(ctx)
+		Where("license_id = ? AND status = ?", licenseID, model.ActivationActive).Count(ctx)
 }
 
 // FindExpiringLicenses returns active licenses that expire between `from` and `to`.
@@ -2087,26 +2117,45 @@ func (s *Store) ClaimProcessedEvent(ctx context.Context, provider, eventID strin
 
 // ─── Transactional Activation ───
 
-// ActivateWithinLimit atomically creates an activation only if the limit hasn't been reached.
-// Locks the license row (not activation rows) to serialize concurrent activations.
+// ErrActivationLimit reports that every activation slot of the
+// license is in use by other devices. The message string is part of
+// the public behavior (the service maps it to 409 ACTIVATION_LIMIT),
+// so it must not change.
+var ErrActivationLimit = errors.New("activation limit reached")
+
 // ErrAlreadyActivated reports that this machine already holds an
-// activation on this license, so nothing was taken from the limit.
+// active activation on this license, so nothing was taken from the
+// limit.
 var ErrAlreadyActivated = errors.New("identifier is already activated")
 
-// ActivateWithinLimit takes one activation slot for a machine, or says
-// why it could not.
+// ActivateWithinLimit takes one activation slot for a machine, or
+// says why it could not. Returns ErrAlreadyActivated when the machine
+// already holds an active slot (act.ID is set to it; no slot taken)
+// and ErrActivationLimit when every slot is in use.
 //
 // Every decision happens under the license row lock. The service also
 // looks for an existing activation before calling, which handles the
 // ordinary repeat, but that read is not in this transaction: two
 // requests from the SAME machine could both miss it and arrive here
-// together. Whichever way the limit fell, the second one was wrong.
-// At the cap it counted the slot the first had just taken and answered
-// "activation limit reached", telling a machine the license it already
-// holds is full. Below the cap both passed the count and the second
-// insert hit the unique index on (license_id, identifier), which
-// surfaced as a 500. A client retrying a timed-out activation, or an
-// app opened twice, met one or the other.
+// together. At the cap the second one would have counted the slot the
+// first had just taken and answered "activation limit reached",
+// telling a machine the license it already holds is full; below the
+// cap the second insert hit the unique index, surfacing as a 500. A
+// client retrying a timed-out activation, or an app opened twice, met
+// one or the other. Checking inside the lock fixes both.
+//
+// Only status='active' rows are duplicate-checked and counted:
+// deactivated tombstones (device transfers) neither consume slots
+// nor block a returning machine. A returning machine's INSERT revives
+// its tombstone in place through the ON CONFLICT DO UPDATE branch of
+// the partial unique index (20261017_device_records.up.sql), keeping
+// one row per (license_id, identifier).
+//
+// The lock is the same one every license-row writer takes (plan
+// updates, transfers, revocations), so limit checks, transfer
+// deactivations and max_activations changes serialize with each
+// other: a transfer frees its slot before any activation that raced
+// with it makes its decision.
 func (s *Store) ActivateWithinLimit(ctx context.Context, act *model.Activation, maxActivations int) error {
 	if act.ID == "" {
 		act.ID = newID()
@@ -2118,18 +2167,19 @@ func (s *Store) ActivateWithinLimit(ctx context.Context, act *model.Activation, 
 	}
 	defer tx.Rollback()
 
-	// Lock the license row to serialize concurrent activations
+	// Lock the license row to serialize concurrent activations,
+	// transfers and plan updates.
 	_, err = tx.NewRaw("SELECT id FROM licenses WHERE id = ? FOR UPDATE", act.LicenseID).Exec(ctx)
 	if err != nil {
 		return err
 	}
 
-	// This machine may already hold a slot, in which case it is not
-	// competing for one.
+	// This machine may already hold an active slot, in which case it
+	// is not competing for one.
 	var existingID string
 	switch err := tx.NewRaw(
-		"SELECT id FROM activations WHERE license_id = ? AND identifier = ?",
-		act.LicenseID, act.Identifier,
+		"SELECT id FROM activations WHERE license_id = ? AND identifier = ? AND status = ?",
+		act.LicenseID, act.Identifier, model.ActivationActive,
 	).Scan(ctx, &existingID); {
 	case err == nil && existingID != "":
 		act.ID = existingID
@@ -2138,27 +2188,115 @@ func (s *Store) ActivateWithinLimit(ctx context.Context, act *model.Activation, 
 		return err
 	}
 
-	// Now safely count existing activations
+	// Count the slots currently in use; deactivated rows are
+	// tombstones and do not count.
 	var count int
 	err = tx.NewRaw(
-		"SELECT COUNT(*) FROM activations WHERE license_id = ?",
-		act.LicenseID,
+		"SELECT COUNT(*) FROM activations WHERE license_id = ? AND status = ?",
+		act.LicenseID, model.ActivationActive,
 	).Scan(ctx, &count)
 	if err != nil {
 		return err
 	}
 
 	if count >= maxActivations {
-		return fmt.Errorf("activation limit reached")
+		return ErrActivationLimit
 	}
 
-	_, err = tx.NewInsert().Model(act).Exec(ctx)
-	if err != nil {
+	// Explicit column list: the insert must not inherit the zero
+	// value of the Scheme/Status Go fields if a caller forgot to set
+	// them. RETURNING reports the surviving row id, which differs
+	// from the generated act.ID when a deactivated tombstone is
+	// revived in place.
+	err = tx.NewInsert().Model(act).
+		Column("id", "license_id", "identifier", "identifier_type",
+			"scheme", "status", "label", "ip_address").
+		On("CONFLICT (license_id, identifier) DO UPDATE").
+		Set("status = EXCLUDED.status").
+		Set("deactivated_at = NULL").
+		Set("deactivated_reason = ''").
+		Set("scheme = EXCLUDED.scheme").
+		Set("label = EXCLUDED.label").
+		Set("ip_address = EXCLUDED.ip_address").
+		Set("last_verified = now()").
+		Returning("id").Scan(ctx, &act.ID)
+	switch {
+	case err == nil:
+		return tx.Commit()
+	case isUniqueViolationNamed(err, "activations_license_id_identifier"):
+		// Defense in depth: under the license lock this should be
+		// unreachable, but a unique violation must never surface as
+		// a 500 — the machine already holds the slot.
+		return ErrAlreadyActivated
+	default:
 		return err
 	}
-
-	return tx.Commit()
 }
+
+// MigrateActivationIdentifier transitions an active activation record from an old identifier
+// representation (e.g. legacy or sha256-v1) to a new versioned identifier (e.g. kgid-v1)
+// in-place without releasing or re-consuming a license slot.
+func (s *Store) MigrateActivationIdentifier(ctx context.Context, licenseID, oldIdentifier, newIdentifier, newScheme string) (*model.Activation, error) {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Lock the license row to serialize mutations
+	_, err = tx.NewRaw("SELECT id FROM licenses WHERE id = ? FOR UPDATE", licenseID).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 1. Locate the existing active activation under oldIdentifier
+	oldAct := new(model.Activation)
+	err = tx.NewSelect().Model(oldAct).
+		Where("license_id = ? AND identifier = ? AND status = ?", licenseID, oldIdentifier, model.ActivationActive).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Check if newIdentifier already has an activation record on this license
+	existingNew := new(model.Activation)
+	err = tx.NewSelect().Model(existingNew).
+		Where("license_id = ? AND identifier = ?", licenseID, newIdentifier).
+		Scan(ctx)
+	if err == nil {
+		// New identifier already exists. If it's already active, deactivate the old one.
+		if existingNew.Status == model.ActivationActive {
+			_, _ = tx.NewUpdate().Model((*model.Activation)(nil)).
+				Set("status = ?, deactivated_at = now(), deactivated_reason = 'migrated'", model.ActivationDeactivated).
+				Where("id = ?", oldAct.ID).Exec(ctx)
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
+			return existingNew, nil
+		}
+		// If existingNew was deactivated, remove it so we don't hit the unique index on update
+		_, _ = tx.NewDelete().Model((*model.Activation)(nil)).Where("id = ?", existingNew.ID).Exec(ctx)
+	}
+
+	// 3. Update the old activation in-place to the new identifier and scheme
+	_, err = tx.NewUpdate().Model((*model.Activation)(nil)).
+		Set("identifier = ?, scheme = ?, last_verified = now()", newIdentifier, newScheme).
+		Where("id = ?", oldAct.ID).
+		Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	oldAct.Identifier = newIdentifier
+	oldAct.Scheme = newScheme
+	oldAct.LastVerified = time.Now()
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return oldAct, nil
+}
+
 
 // ─── Email Queue ───
 

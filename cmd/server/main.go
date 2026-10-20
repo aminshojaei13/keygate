@@ -227,10 +227,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("database: %v", err)
 	}
-	if err := db.RunMigrations("db/migrations"); err != nil {
+	defer db.Close()
+
+	migrationsDir := os.Getenv("MIGRATIONS_DIR")
+	if migrationsDir == "" {
+		migrationsDir = "db/migrations"
+	}
+	if err := db.RunMigrations(migrationsDir); err != nil {
 		log.Fatalf("migrations: %v", err)
 	}
-	defer db.Close()
+
+	if os.Getenv("MIGRATE_ONLY") == "true" || (len(os.Args) > 1 && (os.Args[1] == "migrate" || os.Args[1] == "--migrate-only")) {
+		log.Printf("migrations complete; exiting (migrate-only mode)")
+		return
+	}
 
 	logger := newLogger(os.Stdout)
 
@@ -416,6 +426,7 @@ func main() {
 	expiryChecker := service.NewExpiryChecker(db, emailSvc, webhookSvc, logger)
 	meteredSyncer := service.NewMeteredBillingSyncer(db, logger)
 	adminH := handler.NewAdminHandler(db, webhookSvc, emailSvc, expiryChecker, meteredSyncer)
+	adminH.LicenseSvc = licenseSvc
 	// An update period may only be written once the links a public
 	// feed handed out have expired, and this is how long they live.
 	// The admin API and the fulfilment guard measure the same wait
@@ -708,12 +719,23 @@ func main() {
 	// Long-lived so it can be cached aggressively; rotation is an
 	// operator action that forces clients to re-fetch.
 	licensePubHex := hex.EncodeToString(licenseSvc.SigningPublicKey())
+	licenseKid := license.KeyIDFromPublicKey(licenseSvc.SigningPublicKey())
 	v1.GET("/license/pubkey", func(c *gin.Context) {
 		c.Header("Cache-Control", "public, max-age=3600")
 		response.OK(c, gin.H{
+			"kid":        licenseKid,
 			"algorithm":  "ed25519",
 			"public_key": licensePubHex,
 			"format":     "hex",
+			"keys": []gin.H{
+				{
+					"kid":        licenseKid,
+					"algorithm":  "ed25519",
+					"public_key": licensePubHex,
+					"format":     "hex",
+					"status":     "active",
+				},
+			},
 		})
 	})
 
@@ -797,6 +819,7 @@ func main() {
 	v1.GET("/releases/:product_slug/feed.json", append(feedMW, releasePublicH.FeedVelopack)...)
 	v1.GET("/releases/:product_slug/velopack/*path", append(feedMW, releasePublicH.FeedVelopackIndex)...)
 	v1.GET("/releases/:product_slug/upgrade.json", append(feedMW, releasePublicH.FeedTauri)...)
+	v1.GET("/releases/:product_slug/signing-key", append(feedMW, releasePublicH.SigningKeys)...)
 
 	// Old /releases/feed.* (no product slug, license-key auth) → 410 Gone
 	// with a migration hint. Pre-launch hard cutover; no live clients.
@@ -1191,6 +1214,11 @@ func main() {
 		licWrite.DELETE("/licenses/:id/addons/:addon_id", adminH.RemoveLicenseAddon)
 		licWrite.GET("/licenses/:id/floating", adminH.ListFloatingSessions)
 
+		licWrite.POST("/licenses/:id/transfer", adminH.TransferLicense)
+		licWrite.POST("/licenses/:id/offline-token", adminH.IssueOfflineToken)
+
+		licWrite.POST("/activations/:id/deactivate", adminH.DeactivateActivation)
+		licWrite.POST("/activations/:id/reactivate", adminH.ReactivateActivation)
 		licWrite.DELETE("/activations/:id", adminH.DeleteActivation)
 
 		admin.GET("/api-keys", adminH.ListAPIKeys)

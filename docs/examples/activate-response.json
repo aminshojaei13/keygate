@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "data": {
+    "status": "activated",
+    "license_id": "lic_01HQ8Z3M5K",
+    "token": "eyJsaWQiOiJsaWNfMDFIUThaM001SyIsInBpZCI6InByZF8wMUhROFoxMkFCIiwicGxuIjoicGxuXzAxSFE4WjlYWVoiLCJzdHMiOiJhY3RpdmUiLCJkaWQiOiI1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDAiLCJmdHIiOnsiZXhwb3J0Ijp0cnVlLCJzZWF0cyI6IjUifSwiaWF0IjoxNzk1MDAwMDAwLCJleHAiOjE3OTU2MDQ4MDAsInZ1biI6MTgwMDAwMDAwMCwidXBkIjoxNzk4NjA4MDAwLCJncmMiOjcsIm5jZSI6ImRHaHBjeTFwY3kxaExXNXZibU5sIiwiZnByIjoiOWY4NmQwODE4ODRjN2Q2NSJ9.u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7uw",
+    "meta": {
+      "server": "Keygate",
+      "url": "https://keygate.app"
+    }
+  }
+}

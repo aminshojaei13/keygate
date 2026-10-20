@@ -2,9 +2,11 @@ import {
   BarChart3,
   Blocks,
   ChevronDown,
+  Code2,
   FileKey2,
   Heart,
   Key,
+  Laptop,
   Layers,
   LayoutDashboard,
   Link2,
@@ -60,6 +62,7 @@ export function AdminLayout() {
       label: t("nav.licensing"),
       items: [
         { to: "/admin/licenses", label: t("nav.licenses"), icon: Key },
+        { to: "/admin/devices", label: t("nav.devices"), icon: Laptop },
         { to: "/admin/customers", label: t("nav.customers"), icon: Users },
       ],
     },
@@ -68,6 +71,7 @@ export function AdminLayout() {
       items: [
         { to: "/admin/api-keys", label: t("nav.apiKeys"), icon: FileKey2 },
         { to: "/admin/webhooks", label: t("nav.webhooks"), icon: Link2 },
+        { to: "/admin/integration", label: t("nav.integration"), icon: Code2 },
       ],
     },
     {

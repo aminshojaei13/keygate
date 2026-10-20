@@ -1,0 +1,7 @@
+{
+  "success": false,
+  "error": {
+    "code": "LICENSE_NOT_FOUND",
+    "message": "license not found"
+  }
+}

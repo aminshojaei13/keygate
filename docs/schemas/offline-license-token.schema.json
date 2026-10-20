@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://keygate.app/schemas/offline-license-token.schema.json",
+  "title": "KeygateOfflineLicenseToken",
+  "description": "Schema for the offline-verifiable license entitlement token payload and signed wire format in the Keygate ecosystem.",
+  "type": "object",
+  "required": ["lid", "pid", "sts", "iat", "exp"],
+  "properties": {
+    "ver": {
+      "type": "string",
+      "enum": ["1"],
+      "default": "1",
+      "description": "Token schema specification version."
+    },
+    "kid": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-zA-Z0-9_.-]+$",
+      "description": "Public key identifier for the server signing key used to sign this token."
+    },
+    "lid": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Unique license identifier."
+    },
+    "pid": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Unique product or application identifier."
+    },
+    "pln": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Subscription or pricing plan identifier."
+    },
+    "sts": {
+      "type": "string",
+      "enum": ["active", "suspended", "expired", "revoked"],
+      "description": "License status at the time of token issuance."
+    },
+    "did": {
+      "type": "string",
+      "maxLength": 256,
+      "description": "Bound client device identifier (e.g. kgid:v1:platform:hex or UUID)."
+    },
+    "ftr": {
+      "type": "object",
+      "description": "Entitlements and feature flags granted to this license installation.",
+      "additionalProperties": true
+    },
+    "iat": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Issuance timestamp as a Unix epoch second."
+    },
+    "exp": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Offline token expiration timestamp as a Unix epoch second. The maximum offline window after which the client must check in."
+    },
+    "vun": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "License term expiration timestamp as a Unix epoch second. Zero or omitted means perpetual license."
+    },
+    "upd": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Perpetual license maintenance cutoff timestamp as a Unix epoch second. Releases published after this date cannot be installed."
+    },
+    "grc": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of grace days allowed after vun before offline client halts execution."
+    },
+    "nce": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Cryptographically random nonce to ensure uniqueness per token issuance and prevent token replay."
+    },
+    "fpr": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$",
+      "description": "16-hex character (8-byte truncated SHA-256) device-product binding fingerprint."
+    }
+  }
+}

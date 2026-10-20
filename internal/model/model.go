@@ -1,6 +1,7 @@
 package model
 
 import (
+	"regexp"
 	"slices"
 	"time"
 
@@ -423,7 +424,64 @@ type Activation struct {
 	LastVerified   time.Time `bun:",nullzero,default:now()" json:"last_verified"`
 	CreatedAt      time.Time `bun:",nullzero,default:now()" json:"created_at"`
 
+	// Scheme records how Identifier is shaped — a label, not a new
+	// identifier: 'legacy' for rows created before scheme tracking,
+	// otherwise 'uuid', 'sha256-v1' (sha256:<64 hex>) or 'opaque'.
+	// Detection only: formats are not enforced, so existing SDK
+	// clients that send free-form identifiers keep working.
+	Scheme string `bun:",notnull,default:'legacy'" json:"scheme"`
+	// Status separates slot-consuming devices from tombstones.
+	// 'active' counts against the plan's max_activations; 'deactivated'
+	// keeps the record for inspection without holding a slot — see
+	// ActivationActive / ActivationDeactivated.
+	Status string `bun:",notnull,default:'active'" json:"status"`
+	// DeactivatedAt / DeactivatedReason describe who released the slot
+	// ('client' | 'portal' | 'admin'). Set only on tombstones; revocation
+	// and expiry cleanup keep their existing hard-delete behavior.
+	DeactivatedAt     *time.Time `json:"deactivated_at,omitempty"`
+	DeactivatedReason string     `bun:",notnull,default:''" json:"deactivated_reason,omitempty"`
+
 	License *License `bun:"rel:belongs-to,join:license_id=id" json:"license,omitempty"`
+}
+
+// Activation status values. Only ActivationActive consumes a slot and
+// passes the FindActivation gate used by verify.
+const (
+	ActivationActive      = "active"
+	ActivationDeactivated = "deactivated"
+)
+
+// Identifier scheme labels recorded at activation time.
+const (
+	ActivationSchemeLegacy = "legacy"    // row predates scheme tracking
+	ActivationSchemeUUID   = "uuid"      // canonical UUID form
+	ActivationSchemeSHA256 = "sha256-v1" // sha256:<64 hex>
+	ActivationSchemeKGIDv1 = "kgid-v1"   // kgid:v1:<platform>:<64 hex>
+	ActivationSchemeOpaque = "opaque"    // anything else, accepted as-is
+)
+
+var (
+	uuidShape   = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	sha256Shape = regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`)
+	kgidShape   = regexp.MustCompile(`^kgid:v1:[a-z0-9_-]+:[0-9a-fA-F]{64}$`)
+)
+
+// DetectIdentifierScheme labels how an identifier is shaped. Pure
+// detection with no rejection: any non-empty identifier the handler
+// accepted is recorded, and an unrecognized shape simply becomes
+// 'opaque'. Unknown values from clients can never reach the schema
+// because this label is computed server-side, never taken from input.
+func DetectIdentifierScheme(identifier string) string {
+	switch {
+	case kgidShape.MatchString(identifier):
+		return ActivationSchemeKGIDv1
+	case uuidShape.MatchString(identifier):
+		return ActivationSchemeUUID
+	case sha256Shape.MatchString(identifier):
+		return ActivationSchemeSHA256
+	default:
+		return ActivationSchemeOpaque
+	}
 }
 
 // ─── Audit Log ───

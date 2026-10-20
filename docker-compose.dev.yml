@@ -1,0 +1,37 @@
+# Docker Compose Development Override
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# This file configures Keygate for local iterative development with local image
+# building, exposed database ports, and development security flags.
+
+services:
+  keygate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: "dev"
+        COMMIT: "local"
+    environment:
+      ENVIRONMENT: development
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keygate}
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-jwt-secret-do-not-use-in-production-32chars}
+      LICENSE_SIGNING_KEY: ${LICENSE_SIGNING_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      WEBHOOK_ALLOW_PRIVATE: "true"
+
+  keygate-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ENVIRONMENT: development
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keygate}
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-jwt-secret-do-not-use-in-production-32chars}
+      LICENSE_SIGNING_KEY: ${LICENSE_SIGNING_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keygate}
+    ports:
+      - "5432:5432"
