@@ -53,6 +53,11 @@ type AdminHandler struct {
 	// Tests use it to commit a change in that window; nil everywhere
 	// else.
 	beforeCutoffWrite func()
+	// StrictDeviceBinding keeps admin reactivation from creating a
+	// second active device behind license-service activation's back.
+	// The service already enforces one live device for SDK callers;
+	// this closes the admin path too.
+	StrictDeviceBinding bool
 }
 
 // feedNotGated refuses a maintenance change on a product
@@ -2980,13 +2985,23 @@ func (h *AdminHandler) ReactivateActivation(c *gin.Context) {
 		response.NotFound(c, "activation not found")
 		return
 	}
-	if err := h.Store.ReactivateActivation(c, id); err != nil {
+	maxActive := 0
+	if h.StrictDeviceBinding {
+		maxActive = 1
+	}
+	if err := h.Store.ReactivateActivation(c, id, maxActive); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			response.NotFound(c, "activation not found")
 			return
 		}
 		if errors.Is(err, store.ErrActivationLimit) || err.Error() == "activation limit reached" {
 			count, _ := h.Store.CountActivations(c, act.LicenseID)
+			if h.StrictDeviceBinding {
+				response.ErrWithDetails(c, http.StatusConflict, "DEVICE_CHANGED",
+					"strict device binding allows one active device; deactivate the current device first",
+					map[string]any{"reason": "different_device", "active": count})
+				return
+			}
 			lic, _ := h.Store.FindLicenseByID(c, act.LicenseID)
 			max := 0
 			if lic != nil && lic.Plan != nil {
@@ -3021,6 +3036,48 @@ func (h *AdminHandler) ReactivateActivation(c *gin.Context) {
 		})
 	}
 	response.OK(c, gin.H{"status": "reactivated", "id": id})
+}
+
+// ResetDeviceBinding releases every active device on a license so the
+// customer can activate new hardware. This is the only way to move a
+// license once strict device binding is on: a hardware or OS change
+// makes the device identifier different, the server refuses it, and
+// support has to lift the original binding first.
+func (h *AdminHandler) ResetDeviceBinding(c *gin.Context) {
+	id := c.Param("id")
+	lic, err := h.Store.FindLicenseByID(c, id)
+	if err != nil {
+		response.NotFound(c, "license not found")
+		return
+	}
+	if !requireKeyProductScope(c, lic.ProductID) {
+		return
+	}
+
+	released, err := h.Store.SoftDeactivateAllActivations(c, id, "admin")
+	if err != nil {
+		response.Internal(c, err)
+		return
+	}
+
+	h.Store.Audit(c, &model.AuditLog{
+		Entity: "license", EntityID: id, Action: "device_binding_reset",
+		ActorType: "admin", ActorID: adminID(c),
+		Changes: map[string]any{"activations_released": released},
+	})
+
+	if h.Webhook != nil {
+		h.Webhook.Dispatch(c, lic.ProductID, "license.device_reset", map[string]any{
+			"license_id":           id,
+			"activations_released": released,
+		})
+	}
+
+	response.OK(c, gin.H{
+		"status":               "reset",
+		"license_id":           id,
+		"activations_released": released,
+	})
 }
 
 // ─── Audit Logs ───

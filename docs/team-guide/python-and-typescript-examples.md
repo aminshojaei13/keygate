@@ -35,7 +35,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 BASE = "http://localhost:9000"
 LICENSE_KEY = "KG-AAAA-BBBB-CCCC-DDDD"   # ساختگی
-IDENTIFIER = "my-machine"
+# شناسهٔ واقعی را با DeviceIdentifier.get_or_create_device_id() بسازید
+IDENTIFIER = "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"  # نمونهٔ ساختگی با قالب معتبر kgid
 
 
 def b64url_decode(s: str) -> bytes:
@@ -61,8 +62,8 @@ def public_key() -> bytes:
     return bytes.fromhex(data["public_key"])
 
 
-def verify_offline(token: str, pub: bytes) -> dict:
-    """بررسی امضا + انقضا، سپس برگرداندن payload."""
+def verify_offline(token: str, pub: bytes, expected_identifier: str) -> dict:
+    """بررسی امضا + انقضا + تطبیق did، سپس برگرداندن payload."""
     payload_b64, sig_b64 = token.rsplit(".", 1)
     signature = b64url_decode(sig_b64)
     message = payload_b64.encode("ascii")          # ← امضا روی رشتهٔ base64
@@ -72,6 +73,11 @@ def verify_offline(token: str, pub: bytes) -> dict:
     now = int(time.time())
     if payload.get("exp", 0) and now > payload["exp"]:
         raise RuntimeError("token expired; run an online verify")
+    did = payload.get("did")
+    if not did:
+        raise RuntimeError("token has no did; run an online verify")
+    if did != expected_identifier:
+        raise RuntimeError("device identifier mismatch; this token belongs to another machine")
     return payload
 
 
@@ -105,7 +111,7 @@ if __name__ == "__main__":
         f.write(token)
 
     # شبیه‌سازی حالت آفلاین
-    parsed = verify_offline(open("keygate-token.txt").read(), pub)
+    parsed = verify_offline(open("keygate-token.txt").read(), pub, IDENTIFIER)
     print("offline OK:", parsed["lid"], parsed["sts"])
 ```
 
@@ -181,9 +187,10 @@ manifest = client.verify_integrity_manifest(envelope_json, install_dir="./dist")
 
 > ⚠️ **ناسازگاری شناخته‌شده:** الگوریتم ساخت `kgid` در `sdk/python/keygate/device.py` با
 > `pkg/deviceid` در Go یکسان نیست (پایتون مقادیر خام را هش می‌کند، Go ابتدا هر مؤلفه را با
-> domain separation هش و سپس digest مرکب می‌سازد). چون سرور فعلاً فقط **قالب** را اعتبارسنجی
-> می‌کند اثر عملی ندارد، ولی اگر روزی drift scoring سمت سرور فعال شود باید یکی شوند.
-> این مورد در `documentation-audit.md` ثبت شده است.
+> domain separation هش و سپس digest مرکب می‌سازد). در حالت tolerant اثر عملی ندارد، ولی در
+> strict binding لایسنس به **همان رشتهٔ** اولین activate بسته می‌شود؛ اگر یک محصول با دو
+> SDK (مثلاً پایتون و C#) شناسه‌های متفاوت بسازد، SDK دوم `DEVICE_CHANGED` می‌گیرد. پیش از
+> production الگوریتم را یکی کنید. این مورد در `documentation-audit.md` ثبت شده است.
 
 ### ۱.۴ نکات Python
 
@@ -223,7 +230,7 @@ ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 
 const BASE = process.env.KEYGATE_BASE_URL ?? 'http://localhost:9000';
 const LICENSE_KEY = 'KG-AAAA-BBBB-CCCC-DDDD'; // ساختگی
-const IDENTIFIER = 'my-machine';
+const IDENTIFIER = 'kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7'; // نمونهٔ ساختگی؛ در برنامه از kgid محاسبه‌شده استفاده کنید
 
 function b64urlToBytes(s: string): Uint8Array {
   s = s.replace(/-/g, '+').replace(/_/g, '/');
@@ -252,7 +259,7 @@ async function publicKey(): Promise<Uint8Array> {
   return Uint8Array.from(data.public_key.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
 }
 
-async function verifyOffline(token: string, pub: Uint8Array): Promise<any> {
+async function verifyOffline(token: string, pub: Uint8Array, expectedIdentifier: string): Promise<any> {
   const i = token.lastIndexOf('.');
   const payloadB64 = token.slice(0, i);
   const sig = b64urlToBytes(token.slice(i + 1));
@@ -264,6 +271,8 @@ async function verifyOffline(token: string, pub: Uint8Array): Promise<any> {
   const payload = JSON.parse(new TextDecoder().decode(b64urlToBytes(payloadB64)));
   const now = Math.floor(Date.now() / 1000);
   if (payload.exp && now > payload.exp) throw new Error('token expired');
+  if (!payload.did) throw new Error('token has no did; run an online verify');
+  if (payload.did !== expectedIdentifier) throw new Error('device identifier mismatch');
   return payload;
 }
 
@@ -279,7 +288,7 @@ async function verifyOnline(): Promise<string> {
 (async () => {
   const pub = await publicKey();
   const token = await verifyOnline();
-  const parsed = await verifyOffline(token, pub);
+  const parsed = await verifyOffline(token, pub, IDENTIFIER);
   console.log('offline OK:', parsed.lid, parsed.sts);
 })();
 ```
@@ -303,12 +312,12 @@ curl -s http://localhost:9000/api/v1/license/pubkey | jq
 # فعال‌سازی
 curl -s -X POST http://localhost:9000/api/v1/license/activate \
   -H 'Content-Type: application/json' \
-  -d '{"license_key":"KG-AAAA-BBBB-CCCC-DDDD","identifier":"my-machine","label":"Office PC"}' | jq
+  -d '{"license_key":"KG-AAAA-BBBB-CCCC-DDDD","identifier":"kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7","label":"Office PC"}' | jq
 
 # اعتبارسنجی
 curl -s -X POST http://localhost:9000/api/v1/license/verify \
   -H 'Content-Type: application/json' \
-  -d '{"license_key":"KG-AAAA-BBBB-CCCC-DDDD","identifier":"my-machine"}' | jq
+  -d '{"license_key":"KG-AAAA-BBBB-CCCC-DDDD","identifier":"kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"}' | jq
 
 # ثبت مصرف با Idempotency-Key
 curl -s -X POST http://localhost:9000/api/v1/license/usage \
@@ -321,10 +330,10 @@ curl -s -X POST http://localhost:9000/api/v1/license/download \
   -H 'Content-Type: application/json' \
   -d '{"license_key":"KG-AAAA-BBBB-CCCC-DDDD","platform":"windows-x64"}' | jq
 
-# لغو فعال‌سازی
+# لغو فعال‌سازی (در حالت strict پیش‌فرض ۴۰۳ DEACTIVATION_DISABLED می‌دهد)
 curl -s -X POST http://localhost:9000/api/v1/license/deactivate \
   -H 'Content-Type: application/json' \
-  -d '{"license_key":"KG-AAAA-BBBB-CCCC-DDDD","identifier":"my-machine"}' | jq
+  -d '{"license_key":"KG-AAAA-BBBB-CCCC-DDDD","identifier":"kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"}' | jq
 ```
 
 ---
@@ -357,7 +366,7 @@ pub = priv.public_key().public_bytes(
     serialization.Encoding.Raw, serialization.PublicFormat.Raw)
 
 payload = {"lid": "lic_test", "pid": "prod_test", "pln": "plan_test",
-           "sts": "active", "did": "my-machine",
+           "sts": "active", "did": "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7",
            "iat": int(time.time()), "exp": int(time.time()) + 3600,
            "vun": 0, "upd": 0, "grc": 7, "nce": "test", "fpr": "0011223344556677"}
 

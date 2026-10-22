@@ -202,7 +202,9 @@ class OfflineTokenVerifier:
         # 7. Device Binding Validation
         if expected_identifier:
             did = claims_dict.get("did")
-            if did and did != expected_identifier:
+            if not did:
+                raise OfflineVerificationError("token has no device identifier (did); an online verify is required", "DEVICE_MISMATCH")
+            if did != expected_identifier:
                 raise OfflineVerificationError(f"device identifier mismatch: got '{did}', expected '{expected_identifier}'", "DEVICE_MISMATCH")
             fpr = claims_dict.get("fpr")
             if fpr:

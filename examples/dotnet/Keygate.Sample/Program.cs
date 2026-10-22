@@ -11,9 +11,13 @@ namespace Keygate.Sample;
 ///
 /// Usage:
 ///   dotnet run -- pubkey
-///   dotnet run -- activate --license-key KG-XXXX-XXXX-XXXX-XXXX --identifier my-machine
-///   dotnet run -- verify   --license-key KG-XXXX-XXXX-XXXX-XXXX --identifier my-machine
-///   dotnet run -- offline  --token-file keygate-token.txt
+///   dotnet run -- activate --license-key KG-XXXX-XXXX-XXXX-XXXX --identifier kgid:v1:...
+///   dotnet run -- verify   --license-key KG-XXXX-XXXX-XXXX-XXXX --identifier kgid:v1:...
+///   dotnet run -- offline  --token-file keygate-token.txt --identifier kgid:v1:...
+///
+/// Strict device binding (the server default): pass the same identifier the
+/// app computes from the current hardware/OS. A token whose `did` does not
+/// match must be rejected, so the app stops after a hardware or OS change.
 /// </summary>
 public static class Program
 {
@@ -85,7 +89,7 @@ public static class Program
         Console.WriteLine($"license_id: {res.LicenseId}");
         SaveToken(opts.TokenFile, res.Token);
         Console.WriteLine($"token     : saved to {opts.TokenFile}");
-        await VerifyTokenWithServerKeyAsync(client, res.Token);
+        await VerifyTokenWithServerKeyAsync(client, res.Token, opts.Identifier!);
         return 0;
     }
 
@@ -106,7 +110,7 @@ public static class Program
         }
         SaveToken(opts.TokenFile, res.Token);
         Console.WriteLine($"token      : saved to {opts.TokenFile}");
-        await VerifyTokenWithServerKeyAsync(client, res.Token);
+        await VerifyTokenWithServerKeyAsync(client, res.Token, opts.Identifier!);
         return 0;
     }
 
@@ -115,6 +119,13 @@ public static class Program
         if (!File.Exists(opts.TokenFile))
         {
             Console.Error.WriteLine($"No saved token at {opts.TokenFile}. Run 'activate' or 'verify' first.");
+            return 1;
+        }
+        if (string.IsNullOrWhiteSpace(opts.Identifier))
+        {
+            Console.Error.WriteLine("Strict binding: offline verification requires --identifier.");
+            Console.Error.WriteLine("Pass the same hardware-derived identifier the app computes at startup;");
+            Console.Error.WriteLine("a token for different hardware or software must be rejected.");
             return 1;
         }
 
@@ -130,9 +141,9 @@ public static class Program
         var publicKey = Hex.Decode(File.ReadAllText(keyFile).Trim());
         var token = File.ReadAllText(opts.TokenFile).Trim();
 
-        var parsed = OfflineToken.VerifyAndParse(token, publicKey);
+        var parsed = OfflineToken.VerifyAndParse(token, publicKey, opts.Identifier);
 
-        Console.WriteLine("Offline verification: OK (signature valid, token not expired).");
+        Console.WriteLine("Offline verification: OK (signature valid, token not expired, device matches).");
         Console.WriteLine($"license_id : {parsed.LicenseId}");
         Console.WriteLine($"product_id : {parsed.ProductId}");
         Console.WriteLine($"plan_id    : {parsed.PlanId}");
@@ -149,14 +160,14 @@ public static class Program
         return 0;
     }
 
-    private static async Task VerifyTokenWithServerKeyAsync(KeygateClient client, string token)
+    private static async Task VerifyTokenWithServerKeyAsync(KeygateClient client, string token, string identifier)
     {
         if (string.IsNullOrWhiteSpace(token)) return;
         try
         {
             var pk = await client.GetPublicKeyAsync();
             var publicKey = Hex.Decode(pk.PublicKey);
-            var parsed = OfflineToken.VerifyAndParse(token, publicKey);
+            var parsed = OfflineToken.VerifyAndParse(token, publicKey, identifier);
             Console.WriteLine("signature : VERIFIED (Ed25519, matches /license/pubkey)");
             Console.WriteLine($"token exp : {Fmt(DateTimeOffset.FromUnixTimeSeconds(parsed.ExpiresAt))}");
         }
@@ -225,7 +236,7 @@ public static class Program
         Console.WriteLine("  pubkey                                            Fetch the Ed25519 public key");
         Console.WriteLine("  activate --license-key KEY --identifier ID        Activate this device");
         Console.WriteLine("  verify   --license-key KEY --identifier ID        Verify + refresh the offline token");
-        Console.WriteLine("  offline  [--token-file FILE]                      Verify a saved token with no network");
+        Console.WriteLine("  offline  --identifier ID [--token-file FILE]      Verify a saved token with no network");
         Console.WriteLine();
         Console.WriteLine("Optional: --label NAME, --token-file FILE");
         Console.WriteLine("Config:   appsettings.json { \"Keygate\": { \"BaseUrl\": \"...\" } } or KEYGATE_BASE_URL env var");

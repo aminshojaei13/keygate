@@ -19,6 +19,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-keygate}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-keygate}?sslmode=disable}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       LICENSE_SIGNING_KEY: ${LICENSE_SIGNING_KEY:?Set LICENSE_SIGNING_KEY in .env}
+      # One device per license by default. See .env.example for the
+      # trade-off and how an admin moves a license to new hardware.
+      STRICT_DEVICE_BINDING: ${STRICT_DEVICE_BINDING:-true}
       RELEASE_KEY_ENCRYPTION_KEY: ${RELEASE_KEY_ENCRYPTION_KEY:-}
       MIGRATIONS_DIR: ${MIGRATIONS_DIR:-db/migrations}
       # Administrative & integration settings

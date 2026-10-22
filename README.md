@@ -15,13 +15,13 @@ The self-hosted alternative to Keygen, Cryptlex, and LicenseSpring.
 [![Stars](https://img.shields.io/github/stars/tabloy/keygate?style=flat)](https://github.com/tabloy/keygate/stargazers)
 [![Sponsor](https://img.shields.io/badge/sponsor-❤-ff69b4)](https://ko-fi.com/alanisme)
 
-**[English](README.md)** · **[简体中文](README.zh-CN.md)** · **[فارسی](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/team-guide/README.md)**
+**[English](README.md)** · **[简体中文](README.zh-CN.md)** · **[فارسی](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/team-guide/README.md)**
 
 <br />
 
 > **Fork:** [`aminshojaei13/keygate`](https://github.com/aminshojaei13/keygate) — a fork of
 > [`tabloy/keygate`](https://github.com/tabloy/keygate). Active work lives on the
-> [`security-enhancements`](https://github.com/aminshojaei13/keygate/tree/security-enhancements)
+> [`update-docs`](https://github.com/aminshojaei13/keygate/tree/update-docs)
 > branch; `main` tracks upstream. See [What's in this fork](#whats-in-this-fork) below.
 
 
@@ -110,9 +110,9 @@ containers.
 git clone https://github.com/aminshojaei13/keygate.git
 cd keygate
 
-# Optional: the fork's newest work (device identity, offline tokens,
-# integrity manifests, admin Devices/Integration pages, SDK samples)
-git switch security-enhancements
+# The fork's work: strict device binding, offline tokens, integrity
+# manifests, admin Devices/Integration pages, and SDK samples
+git switch update-docs
 ```
 
 ### 2. Generate config and secrets
@@ -125,6 +125,11 @@ sed -i.bak "s|^LICENSE_SIGNING_KEY=.*|LICENSE_SIGNING_KEY=$(openssl rand -hex 32
 
 Optional, but recommended: set `ADMIN_EMAILS=you@example.com` in `.env`. When it is set, only
 that address can claim the first-run owner account.
+
+`.env.example` enables `STRICT_DEVICE_BINDING=true`: a license is bound to the first
+hardware-derived identifier, and a different device is refused with `409 DEVICE_CHANGED`.
+See [Authentication & security](docs/team-guide/authentication-and-security.md) §12.4 for the
+client checklist and the admin reset action.
 
 ### 3. Build and start
 
@@ -193,11 +198,17 @@ Open <http://localhost:9000> (migrations run automatically on startup).
 
 ## What's in this fork
 
-The [`security-enhancements`](https://github.com/aminshojaei13/keygate/tree/security-enhancements)
+The [`update-docs`](https://github.com/aminshojaei13/keygate/tree/update-docs)
 branch adds, on top of upstream:
 
-- **Device identity protocol** (`kgid:v1`) with scheme detection, drift scoring, and safe
-  identifier migration via `previous_identifier`.
+- **Strict device binding** (default): one active device per license, exact
+  hardware-derived identity (`kgid:v1` or `sha256:`), no client/portal slot release, and
+  no `previous_identifier` migration. Activation with a changed identifier is refused
+  with `409 DEVICE_CHANGED` (verification returns `404`); an admin can move the license
+  with `POST /admin/licenses/:id/reset-device-binding`.
+- **Device identity protocol** (`kgid:v1`) with scheme detection. Weighted drift scoring is
+  defined and tested in `pkg/deviceid` but not wired to activate/verify; setting
+  `STRICT_DEVICE_BINDING=false` currently restores multi-device limits and migration.
 - **Activation lifecycle**: soft-delete tombstones plus admin deactivate/reactivate, license
   transfer, and signed offline-token issuance.
 - **Offline tokens** with `ver`/`kid` and key rotation, discoverable at
@@ -216,18 +227,18 @@ branch adds, on top of upstream:
 
 | Guide | What it covers |
 |---|---|
-| [**Persian team guide**](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/team-guide/README.md) | Setup, architecture, security, deployment, troubleshooting (فارسی) |
-| [API reference — all 151 routes](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/team-guide/api-reference.md) | Every registered endpoint with a uniform field table |
-| [C# / .NET integration](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/team-guide/csharp-dotnet-integration.md) | Activation, verification, offline tokens, samples |
-| [C# samples](https://github.com/aminshojaei13/keygate/tree/security-enhancements/examples/dotnet) | `Keygate.Sample` (net8.0) and `Keygate.Sample.NetCore31` |
-| [Python SDK](https://github.com/aminshojaei13/keygate/tree/security-enhancements/sdk/python) | Zero-dependency client, offline verifier, manifest verifier |
-| [Device identity spec](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/device-identity.md) | `kgid:v1`, drift scoring, migration |
-| [Offline licensing spec](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/offline-licensing.md) | Token format, claims, verification rules |
-| [Integrity manifest spec](https://github.com/aminshojaei13/keygate/blob/security-enhancements/docs/integrity-manifest-format.md) | Envelope, canonicalization, signing |
-| [Deployment & configuration](https://github.com/aminshojaei13/keygate/tree/security-enhancements/docs) | Production install, backups, key management |
+| [**Persian team guide**](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/team-guide/README.md) | Setup, architecture, security, deployment, troubleshooting (فارسی) |
+| [API reference](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/team-guide/api-reference.md) | Every registered endpoint, including strict-binding errors and admin reset |
+| [C# / .NET integration](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/team-guide/csharp-dotnet-integration.md) | Activation, verification, offline tokens, samples |
+| [C# samples](https://github.com/aminshojaei13/keygate/tree/update-docs/examples/dotnet) | `Keygate.Sample` (net8.0) and `Keygate.Sample.NetCore31` |
+| [Python SDK](https://github.com/aminshojaei13/keygate/tree/update-docs/sdk/python) | Zero-dependency client, offline verifier, manifest verifier |
+| [Device identity spec](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/device-identity.md) | Strict binding, `kgid:v1`, tolerant multi-device mode |
+| [Offline licensing spec](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/offline-licensing.md) | Token format, claims, verification rules |
+| [Integrity manifest spec](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/integrity-manifest-format.md) | Envelope, canonicalization, signing |
+| [Deployment & configuration](https://github.com/aminshojaei13/keygate/tree/update-docs/docs) | Production install, backups, key management |
 | [keygate.app/docs](https://keygate.app/docs) | Upstream public documentation |
 
-> All `docs/team-guide/*` links point at the `security-enhancements` branch. Once that branch is
+> All `docs/team-guide/*` links point at the `update-docs` branch. Once that branch is
 > merged into `main`, they can be relative paths again.
 
 <br />

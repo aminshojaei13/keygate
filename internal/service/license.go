@@ -15,6 +15,7 @@ import (
 	"github.com/tabloy/keygate/internal/model"
 	"github.com/tabloy/keygate/internal/store"
 	"github.com/tabloy/keygate/pkg/apperr"
+	"github.com/tabloy/keygate/pkg/deviceid"
 )
 
 // FailureTracker tracks failed authentication attempts for brute-force protection.
@@ -35,10 +36,65 @@ type LicenseService struct {
 	logger     *slog.Logger
 	failures   FailureTracker
 	webhook    *WebhookService
+	// strict binds a license to one device for its whole life. Any
+	// identifier other than the active one is DEVICE_CHANGED, even if
+	// the plan still has free activation slots. There is no client-side
+	// release and no previous_identifier migration: only an admin reset
+	// can move the license to new hardware.
+	strict bool
 }
 
-func NewLicenseService(s *store.Store, signingKey licenseSigningKey, logger *slog.Logger, failures FailureTracker, webhook *WebhookService) *LicenseService {
-	return &LicenseService{store: s, signingKey: signingKey, logger: logger, failures: failures, webhook: webhook}
+func NewLicenseService(s *store.Store, signingKey licenseSigningKey, logger *slog.Logger, failures FailureTracker, webhook *WebhookService, strictDeviceBinding bool) *LicenseService {
+	return &LicenseService{
+		store:      s,
+		signingKey: signingKey,
+		logger:     logger,
+		failures:   failures,
+		webhook:    webhook,
+		strict:     strictDeviceBinding,
+	}
+}
+
+// strictSchemeSupported reports whether an identifier is derived from
+// observable machine characteristics. Strict mode accepts:
+//
+//	kgid:v1:<platform>:<64-hex>  (composite of five component digests)
+//	sha256:<64-hex>              (legacy monolithic hardware hash)
+//
+// uuid/opaque identifiers are usually random values stored on disk, so
+// a hardware or OS change leaves them untouched. Accepting them in
+// strict mode would silently defeat the whole check.
+func strictSchemeSupported(identifier string) bool {
+	scheme, _, _, err := deviceid.ParseIdentifier(identifier)
+	if err != nil {
+		return false
+	}
+	return scheme == deviceid.SchemeKGIDv1 || scheme == deviceid.SchemeSHA256
+}
+
+// deviceChanged is the single refusal for strict-mode rebinding. It
+// deliberately does not echo the bound identifier: support can look it
+// up in the admin panel, and a stolen license key should not learn what
+// machine it is attached to.
+func deviceChanged(reason string) *apperr.AppError {
+	return apperr.WithDetails(
+		apperr.Conflict("DEVICE_CHANGED", "device characteristics changed; this license is bound to another device"),
+		map[string]any{
+			"reason": reason,
+			"action": "contact_support",
+			"detail": "strict device binding is enabled; an administrator must reset the device binding before this license can run on new hardware",
+		},
+	)
+}
+
+func identifierSchemeError() *apperr.AppError {
+	return apperr.WithDetails(
+		apperr.New(400, "IDENTIFIER_SCHEME_UNSUPPORTED", "strict device binding requires a hardware-derived identifier"),
+		map[string]any{
+			"required_schemes": []string{deviceid.SchemeKGIDv1, deviceid.SchemeSHA256},
+			"detail":           "use kgid:v1:<platform>:<64-hex> or sha256:<64-hex>; a random UUID cannot detect hardware or OS changes",
+		},
+	)
 }
 
 // SigningPublicKey returns the ed25519 public key that pairs with
@@ -51,11 +107,11 @@ func (s *LicenseService) SigningPublicKey() ed25519.PublicKey {
 // ─── Activate ───
 
 type ActivateInput struct {
-	LicenseKey         string
-	Identifier         string
-	IdentifierType     string // "device" | "user"
-	Label              string
-	IPAddress          string
+	LicenseKey     string
+	Identifier     string
+	IdentifierType string // "device" | "user"
+	Label          string
+	IPAddress      string
 	// ProductID: optional tenant scope. When non-empty the lookup
 	// rejects licenses that don't belong to it. Public SDK endpoints
 	// pass empty (license_key alone identifies tenant); server-to-server
@@ -131,10 +187,56 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 		}, nil
 	}
 
+	// Strict binding: a license is tied to the first device that
+	// activates it. A second identifier is indistinguishable from the
+	// same machine after a hardware or OS change, so it is refused
+	// instead of silently consuming another slot. An administrator can
+	// release the binding with POST /admin/licenses/:id/reset-device-binding.
+	if s.strict {
+		if !strictSchemeSupported(in.Identifier) {
+			s.store.Audit(ctx, &model.AuditLog{
+				Entity: "license", EntityID: lic.ID, Action: "activation_blocked",
+				ActorType: "sdk", IPAddress: in.IPAddress,
+				Changes: map[string]any{"identifier": in.Identifier, "reason": "identifier_scheme_unsupported"},
+			})
+			return nil, identifierSchemeError()
+		}
+
+		// previous_identifier was the old escape hatch for rebinding
+		// after an identifier-algorithm change. It is exactly the
+		// operation strict mode forbids.
+		if in.PreviousIdentifier != "" && in.PreviousIdentifier != in.Identifier {
+			s.store.Audit(ctx, &model.AuditLog{
+				Entity: "license", EntityID: lic.ID, Action: "activation_blocked",
+				ActorType: "sdk", IPAddress: in.IPAddress,
+				Changes: map[string]any{
+					"identifier":          in.Identifier,
+					"previous_identifier": in.PreviousIdentifier,
+					"reason":              "migration_disabled",
+				},
+			})
+			return nil, deviceChanged("migration_disabled")
+		}
+
+		active, err := s.store.CountActivations(ctx, lic.ID)
+		if err != nil {
+			return nil, apperr.Internal(err)
+		}
+		if active > 0 {
+			s.store.Audit(ctx, &model.AuditLog{
+				Entity: "license", EntityID: lic.ID, Action: "activation_blocked",
+				ActorType: "sdk", IPAddress: in.IPAddress,
+				Changes: map[string]any{"identifier": in.Identifier, "reason": "different_device"},
+			})
+			return nil, deviceChanged("different_device")
+		}
+	}
+
 	// Seamless version migration: if a client updates its identifier scheme
 	// and supplies its active previous identifier, migrate the activation in place
 	// without consuming an additional slot or returning ACTIVATION_LIMIT.
-	if in.PreviousIdentifier != "" && in.PreviousIdentifier != in.Identifier {
+	// Strict mode never reaches this branch; it returned above.
+	if !s.strict && in.PreviousIdentifier != "" && in.PreviousIdentifier != in.Identifier {
 		newScheme := model.DetectIdentifierScheme(in.Identifier)
 		migrated, mErr := s.store.MigrateActivationIdentifier(ctx, lic.ID, in.PreviousIdentifier, in.Identifier, newScheme)
 		if mErr == nil && migrated != nil {
@@ -162,6 +264,13 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 	}
 
 	max := s.maxActivations(lic)
+	if s.strict {
+		// Even if the plan allows more seats, strict binding gives the
+		// license exactly one live device. The transaction inside
+		// ActivateWithinLimit serializes concurrent first activations,
+		// so two devices racing cannot both win.
+		max = 1
+	}
 	act := &model.Activation{
 		LicenseID:      lic.ID,
 		Identifier:     in.Identifier,
@@ -191,6 +300,18 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 		}
 		if errors.Is(err, store.ErrActivationLimit) || err.Error() == "activation limit reached" {
 			middleware.LicenseActivations.WithLabelValues(lic.ProductID, "failed").Inc()
+			// Strict mode runs this path with max=1, so hitting the
+			// limit means another device won the race — report the
+			// strict refusal, not a plan-quota message the customer
+			// would try to "fix" by upgrading their plan.
+			if s.strict {
+				s.store.Audit(ctx, &model.AuditLog{
+					Entity: "license", EntityID: lic.ID, Action: "activation_blocked",
+					ActorType: "sdk", IPAddress: in.IPAddress,
+					Changes: map[string]any{"identifier": in.Identifier, "reason": "different_device"},
+				})
+				return nil, deviceChanged("different_device")
+			}
 			count, _ := s.store.CountActivations(ctx, lic.ID)
 			s.store.Audit(ctx, &model.AuditLog{
 				Entity: "license", EntityID: lic.ID, Action: "activation_failed",
@@ -426,6 +547,20 @@ func (s *LicenseService) Deactivate(ctx context.Context, in DeactivateInput) err
 		// can't be used to probe for real keys ("oh, this key returned
 		// ACTIVATION_NOT_FOUND, that's specific — must exist").
 		return licenseNotFound()
+	}
+
+	// Strict binding removes the self-service reset. A client could
+	// otherwise release its slot and activate a different machine with
+	// the same license key, which is the exact bypass strict mode
+	// exists to close. Support releases the binding from the admin API.
+	if s.strict {
+		s.store.Audit(ctx, &model.AuditLog{
+			Entity: "license", EntityID: lic.ID, Action: "deactivation_blocked",
+			ActorType: "sdk", IPAddress: in.IPAddress,
+			Changes: map[string]any{"identifier": in.Identifier, "reason": "strict_device_binding"},
+		})
+		return apperr.New(403, "DEACTIVATION_DISABLED",
+			"strict device binding is enabled; an administrator must release this device")
 	}
 
 	if _, err := s.store.SoftDeactivateActivation(ctx, act.ID, "client"); err != nil {

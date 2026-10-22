@@ -204,7 +204,7 @@ sequenceDiagram
 | `internal/crypto` | AES-GCM و HKDF | `aesgcm.go`, `hkdf.go` |
 | `internal/payment` | Stripe و fulfillment | `fulfill.go` و… |
 | `internal/storage` | انتزاع S3 با presign | `s3.go` |
-| `pkg/deviceid` | شناسهٔ دستگاه v1، هش مؤلفه‌ها، drift scoring، proof-of-possession (فعلاً فقط اعتبارسنجی قالب در سرور استفاده می‌شود) | `deviceid.go` |
+| `pkg/deviceid` | شناسهٔ دستگاه v1، هش مؤلفه‌ها، drift scoring، proof-of-possession (در سرور: بررسی قالب/طرح و binding دقیق در strict؛ drift و proof-of-possession هنوز وصل نیستند) | `deviceid.go` |
 | `pkg/integrity` | ساخت/امضای/بررسی مانیفست `keygate-integrity-v1` | `manifest.go`, `signer.go`, `verifier.go` |
 | `cmd/keygate-manifest` | CLI مستقل برای `create` / `verify` / `inspect` مانیفست | `main.go` |
 | `sdk/python` | کلاینت مرجع پایتون (بدون وابستگی خارجی) | `keygate/client.py`, `offline.py`, `manifest.py` |

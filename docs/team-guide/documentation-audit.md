@@ -10,15 +10,15 @@
 
 | شاخص | مقدار |
 |---|---|
-| routeهای واقعی ثبت‌شده | **۱۵۱** (۱۵۰ multi-method + ۱ `StaticFile`) |
-| routeهای مستندشده در `api-reference.md` | **۱۵۱** (۱۰۰٪) |
+| routeهای واقعی ثبت‌شده | **۱۵۲** (۱۵۱ multi-method + ۱ `StaticFile`) |
+| routeهای مستندشده در `api-reference.md` | **۱۵۲** (۱۰۰٪) |
 | مسیرهای موجود در `docs/openapi.yaml` | **۲۱** |
-| فاصلهٔ OpenAPI با کد | **۱۳۰** مسیر مستندنشده در OpenAPI |
+| فاصلهٔ OpenAPI با کد | **۱۳۱** مسیر مستندنشده در OpenAPI |
 | فایل‌های تست Go | **۹۷** |
 | تست‌های پایتون (SDK + اسکریپت‌های مستقل) | **۴** فایل (`sdk/python/tests/test_sdk.py`، `test/*_test.py`) |
 | سوئیت کامل مستندات فارسی | ۱۳ فایل زیر `docs/team-guide/` |
 
-> مبنای همهٔ اعداد این سند، شاخهٔ `security-enhancements` (HEAD = `1732796`) است، نه
+> مبنای همهٔ اعداد این سند، شاخهٔ `update-docs` (HEAD = `8124d95`) است، نه
 > شاخهٔ `main` بالادستی. تفاوت این دو در بخش ۱۰ توضیح داده شده است.
 
 ---
@@ -38,18 +38,18 @@
 | کاتالوگ عمومی پلن | ۱ | `/products/:product_slug/plans` |
 | Stripe | ۲ | `/webhook/stripe`, `/checkout/verify` |
 | پورتال | ۱۶ | `me, licenses, profile, plans, usage, usage/status, seats*, activations*, subscription*, updates/renew` |
-| ادمین | ۹۵ | `stats, products, plans, entitlements, licenses(۲۳), activations(۳), api-keys, webhooks, addons, settings, system, email-templates, team, analytics, audit-logs, users, releases(۱۲), signing(۶)` |
-| **جمع** | **۱۵۱** | |
+| ادمین | ۹۶ | `stats, products, plans, entitlements, licenses(۲۴), activations(۳), api-keys, webhooks, addons, settings, system, email-templates, team, analytics, audit-logs, users, releases(۱۲), signing(۶)` |
+| **جمع** | **۱۵۲** | |
 
-از ۱۵۱ مسیر، **۱۴۵** زیر `/api/v1` و **۶** روی router ریشه‌اند.
-(۱۵۰ ثبت `GET/POST/PUT/PATCH/DELETE` + ۱ ثبت `StaticFile` برای `docs/openapi.yaml`.)
+از ۱۵۲ مسیر، **۱۴۶** زیر `/api/v1` و **۶** روی router ریشه‌اند.
+(۱۵۱ ثبت `GET/POST/PUT/PATCH/DELETE` + ۱ ثبت `StaticFile` برای `docs/openapi.yaml`.)
 
 ---
 
 ## ۳. شمارش مستندشده
 
-`api-reference.md` همهٔ ۱۵۱ مسیر را با قالب ۲۰ فیلدی مستند می‌کند (ردیف‌هایی که برای یک route
-معنا ندارند با `—` پر یا حذف می‌شوند). **۹۵ endpoint ادمین در §۱۰ تک‌به‌تک و با جدول کامل
+`api-reference.md` همهٔ ۱۵۲ مسیر را با قالب ۲۰ فیلدی مستند می‌کند (ردیف‌هایی که برای یک route
+معنا ندارند با `—` پر یا حذف می‌شوند). **۹۶ endpoint ادمین در §۱۰ تک‌به‌تک و با جدول کامل
 بازنویسی شده‌اند**؛ پیش از این بازنویسی، این بخش به‌صورت خلاصهٔ پاراگرافی بود و قالب یکسان نداشت.
 
 * §۱ زیرساخت (۶)
@@ -61,15 +61,15 @@
 * §۷ کاتالوگ پلن (۱)
 * §۸ Stripe (۲)
 * §۹ پورتال (۱۶)
-* §۱۰ ادمین (۹۵) — شامل `۱۰.۴.۲۳` تا `۱۰.۴.۲۶` (transfer، offline-token، deactivate، reactivate)
+* §۱۰ ادمین (۹۶) — شامل `۱۰.۴.۲۳` تا `۱۰.۴.۲۶` و `۱۰.۴.۲۴.۱` (transfer، offline-token، reset-device-binding، deactivate، reactivate)
 
 ---
 
 ## ۴. endpointهایی که پیش از این سند، مستند نبودند
 
-**۱۳۰ مسیر** هیچ مستندات قبلی (نه OpenAPI، نه سند دیگر) نداشتند:
+**۱۳۱ مسیر** هیچ مستندات قبلی (نه OpenAPI، نه سند دیگر) نداشتند:
 
-* **تمام ۹۵ مسیر ادمین** — هیچ‌یک در OpenAPI نیست.
+* **تمام ۹۶ مسیر ادمین** — هیچ‌یک در OpenAPI نیست.
 * **تمام ۶ مسیر احراز هویت** (`/auth/*`).
 * **پورتال (به‌جز seats):** `me`, `licenses`, `profile`, `plans`, `usage`, `usage/status`,
   `activations*`, `subscription/*`, `updates/renew` (یعنی ۱۳ از ۱۶).
@@ -88,8 +88,8 @@
 
 | موضوع | OpenAPI | پیاده‌سازی واقعی |
 |---|---|---|
-| پوشش مسیر | ۲۱ مسیر | ۱۵۱ مسیر |
-| گروه ادمین | هیچ | ۹۵ مسیر |
+| پوشش مسیر | ۲۱ مسیر | ۱۵۲ مسیر |
+| گروه ادمین | هیچ | ۹۶ مسیر |
 | احراز هویت | هیچ | ۶ مسیر |
 | پورتال (me/licenses/profile/plans/subscriptions) | هیچ | ۱۳ مسیر |
 | مسیر Velopack | `/releases/{product_slug}/velopack/{platform}/{file}` | `GET /releases/:product_slug/velopack/*path` (wildcard) |
@@ -178,7 +178,7 @@ service/store است، ولی شاخهٔ فعلی چند شکاف مهم را ب
 | محلی‌سازی فارسی (`fa`) در فرانت‌اند | **پیاده نشده**؛ فقط `en` و `zh` |
 | کف نسخه برای Velopack | سرور اعمال نمی‌کند و فید Velopack جایی برای آن ندارد (Tauri/Sparkle دارند) |
 | «integrity manifest» | **وجود دارد، ولی خارج از سرور**: پکیج `pkg/integrity` + CLI `cmd/keygate-manifest` (قالب `keygate-integrity-v1`، امضای Ed25519). هیچ endpoint سروری آن را نمی‌سازد یا توزیع نمی‌کند. |
-| شناسهٔ دستگاه (`pkg/deviceid`) | پکیج کامل است (طرح‌های `kgid-v1`/`sha256-v1`/`uuid`/`opaque`، امتیاز drift) ولی در سرور فقط `ValidateIdentifierFormat` استفاده می‌شود؛ بقیهٔ توابع (drift/proof-of-possession) مصرف‌کنندهٔ سروری ندارند. |
+| شناسهٔ دستگاه (`pkg/deviceid`) | در سرور از `ValidateIdentifierFormat` و در حالت strict از بررسی طرح (`kgid-v1`/`sha256-v1`) استفاده می‌شود؛ binding دقیق در `internal/service/license.go` اعمال می‌شود. `EvaluateDrift` و `VerifyProofOfPossession` هنوز مصرف‌کنندهٔ سروری ندارند. |
 | SDK پایتون | پیاده‌شده در `sdk/python` (بدون وابستگی خارجی) و با `test/` پوشش دارد؛ در `Makefile`/CI جزو مسیر پیش‌فرض تست نیست. |
 | `make seed` | هدف Makefile به `./cmd/seed` ارجاع می‌دهد که **وجود ندارد** (فقط `cmd/server` و `cmd/keygate-manifest`). |
 | `require_signing` فقط در سطح محصول | تأییدشده؛ انتشار بدون کلید → `SIGNING_NOT_CONFIGURED` |
@@ -201,16 +201,21 @@ service/store است، ولی شاخهٔ فعلی چند شکاف مهم را ب
 7. **انتساب AGPL v3 §۷(b):** `attribution_text`/`attribution_url` و هدر `X-Powered-By`
    الزام حقوقی‌اند؛ حذف‌شان نقض مجوز است.
 8. **OpenAPI گمراه‌کننده:** فقط SDK عمومی را پوشش می‌دهد؛ اگر توسعه‌دهنده فقط به
-   `/docs` نگاه کند، ۱۳۰ مسیر را نمی‌بیند.
+   `/docs` نگاه کند، ۱۳۱ مسیر را نمی‌بیند.
 9. **متن UI در برابر رفتار backend:** در صفحهٔ Devices، دیالوگ حذف می‌گوید
    «Permanently Delete Device Record»، ولی `DELETE /admin/activations/:id` از این نسخه
    **حذف نرم** انجام می‌دهد (خروجی `204` ولی رکورد با `status='deactivated'` باقی می‌ماند).
 10. **دو پیاده‌سازی متفاوت از `kgid`:** `pkg/deviceid` (Go) و `sdk/python/keygate/device.py`
     یک digest یکسان تولید نمی‌کنند: Go هر مؤلفه را با domain separation هش و سپس digest مرکب
-    می‌سازد؛ پایتون مقادیر خام را در یک رشتهٔ مرکب هش می‌کند. چون سرور فقط **قالب** را
-    اعتبارسنجی می‌کند اثر عملی ندارد، ولی پیش از فعال‌کردن drift scoring باید یکی شوند.
+    می‌سازد؛ پایتون مقادیر خام را در یک رشتهٔ مرکب هش می‌کند. در حالت tolerant اثر عملی
+    ندارد، ولی در strict binding، لایسنس به **همان رشتهٔ** اولین activate بسته می‌شود؛ اگر
+    یک محصول با دو SDK (مثلاً پایتون و C#/Go) شناسهٔ متفاوت بسازد، SDK دوم
+    `DEVICE_CHANGED` می‌گیرد. پیش از production باید الگوریتم یکی شود؛ تغییر الگوریتم هم
+    چون migration غیرفعال است به reset ادمین برای همهٔ لایسنس‌های فعال نیاز دارد.
 11. **`pkg/deviceid` نیمه‌مصرف:** `EvaluateDrift` و `VerifyProofOfPossession` تست دارند ولی
-    هیچ‌جا در سرور صدا زده نمی‌شوند؛ فعال‌سازی آن‌ها تصمیم محصول است.
+    هیچ‌جا در سرور صدا زده نمی‌شوند. حالت strict با مقایسهٔ دقیق `identifier` (و
+    `kgid`/`sha256` برای binding جدید) کار می‌کند؛ حالت tolerant فعلی هم فقط یعنی strict
+    خاموش + سقف پلن + `previous_identifier`، نه امتیازدهی drift. مدل drift طرح آینده است.
 12. **`make seed` شکسته:** هدف Makefile به `./cmd/seed` اشاره می‌کند که وجود ندارد.
 13. **ناسازگاری keyring در SDK پایتون:** توکن‌های همین شاخه فیلد `kid` دارند
     (`key_<16hex>`)، ولی `KeygateClient(license_public_key_hex=…)` کلید را با نام
@@ -223,7 +228,7 @@ service/store است، ولی شاخهٔ فعلی چند شکاف مهم را ب
 
 ## ۹. موارد نیازمند تصمیم تیم
 
-1. **آیا OpenAPI را کامل می‌کنیم** (۱۳۰ مسیر) یا برای مصرف داخلی به `api-reference.md`
+1. **آیا OpenAPI را کامل می‌کنیم** (۱۳۱ مسیر) یا برای مصرف داخلی به `api-reference.md`
    بسنده می‌کنیم؟ (تولید خودکار از routeها ممکن است بهتر باشد.)
 2. **سیاست تست handler:** آیا برای `/auth/*` و `/portal/*` که هیچ تست handler ندارند،
    تست یکپارچه نوشته می‌شود؟
@@ -237,8 +242,10 @@ service/store است، ولی شاخهٔ فعلی چند شکاف مهم را ب
 9. **کاهش افشا:** پنهان‌کردن `/metrics`, `/docs`, و جزئیات `/health` در production.
 10. **یکپارچه‌سازی مانیفست صحت:** آیا `keygate-manifest` باید خروجی‌اش را در release artifact
     ثبت کند و endpointای برای توزیع `integrity.manifest.json` اضافه شود، یا ابزار CLI مستقل بماند؟
-11. **مصرف‌کنندهٔ `pkg/deviceid`:** آیا drift scoring و proof-of-possession باید در سرور
-    (مثلاً هنگام فعال‌سازی) اعمال شود یا فعلاً فقط اعتبارسنجی قالب کافی است؟
+11. **مصرف‌کنندهٔ `pkg/deviceid`:** strict binding اکنون دقیق است؛ drift هنوز به هیچ
+    endpointی وصل نیست (نه strict، نه tolerant). تصمیم باقی‌مانده: آیا drift و
+    proof-of-possession باید در آینده به activate/verify وصل شوند تا جعل سمت کلاینت هم
+    پوشش داده شود؟
 
 ---
 
@@ -281,7 +288,7 @@ service/store است، ولی شاخهٔ فعلی چند شکاف مهم را ب
 
 ## ۱۱. نتیجهٔ تأیید عملی (Executed)
 
-همهٔ موارد زیر روی **همین شاخه** (`security-enhancements`) اجرا شده‌اند:
+همهٔ موارد زیر روی **همین شاخه** (`update-docs`) اجرا شده‌اند:
 
 | بررسی | محیط | نتیجه |
 |---|---|---|
@@ -292,7 +299,8 @@ service/store است، ولی شاخهٔ فعلی چند شکاف مهم را ب
 | بیلد `Keygate.Sample.NetCore31` (Release) | `mcr.microsoft.com/dotnet/sdk:3.1` (linux/amd64) | ✅ `0 Warning(s), 0 Error(s)`؛ اجرای `help` روی runtime 3.1 هم موفق |
 | end-to-end روی **همین شاخه** (setup → dev-login → license → activate → verify) | `go run ./cmd/server` + PostgreSQL 18 | ✅ `setup` ۲۰۱، `activate` = `activated`، `verify` = `active` |
 | اعتبارسنجی شناسه در همین شاخه | همان محیط | ✅ شناسهٔ `kgid:v1:…` پذیرفته شد؛ `machine-abc ` (فاصلهٔ انتهایی) → `400 BAD_REQUEST` |
-| مهاجرت شناسه با `previous_identifier` | همان محیط | ✅ رکورد UUID درجا به `kgid:v1:windows:…` منتقل شد، بدون مصرف سهم اضافه |
+| مهاجرت شناسه با `previous_identifier` | همان محیط | ✅ رکورد UUID درجا به `kgid:v1:windows:…` منتقل شد، بدون مصرف سهم اضافه (حالت tolerant) |
+| **strict device binding** (`DEVICE_CHANGED`، `IDENTIFIER_SCHEME_UNSUPPORTED`، `DEACTIVATION_DISABLED`، reset ادمین، reactivate ادمین) | PostgreSQL 18 موقت | ✅ شش تست handler + تست‌های `strictSchemeSupported`؛ `go test -p 1 ./...` همهٔ پکیج‌ها را پاس کرد |
 | بررسی آفلاین توکن با SDK پایتون (سریع، بدون شبکه) | همان محیط | ✅ پس از `get_license_public_keys()` توکن معتبر شناخته شد (`kid` تطبیق یافت) |
 | `deactivate` / `reactivate` / `DELETE` (حذف نرم) | همان محیط | ✅ `deactivated` → `reactivated` → `204` و رکورد با `status='deactivated'`, `reason='admin'` باقی ماند |
 | `POST /admin/licenses/:id/offline-token` | همان محیط | ✅ توکن صادر شد و یک activation واقعی (`status=activated`) ساخت |
@@ -308,9 +316,10 @@ service/store است، ولی شاخهٔ فعلی چند شکاف مهم را ب
 
 > **شفافیت دربارهٔ اجرای تست‌ها:** دو شکست تستی که در نسخهٔ اول این سند گزارش شد
 > (`TestFeedCutoff_MaintenancePeriod` و `TestQueueMarksPermanentFailureTerminal`) در اجرای
-> **کلون بالادستی** دیده شده بودند، نه در این شاخه. روی این شاخه، اجرای بدون دیتابیس کاملاً
-> سبز است. برای اطمینان کامل باید یک بار دیگر با `TEST_DATABASE_URL` روی PostgreSQL واقعی
-> اجرا شود؛ این کار در این مرحله انجام نشد.
+> **کلون بالادستی** دیده شده بودند، نه در این شاخه. روی این شاخه، `go test -p 1 ./...` با
+> `TEST_DATABASE_URL` روی PostgreSQL 18 موقت اجرا شد و همهٔ پکیج‌ها `ok` بودند.
+> پس از تغییر بررسی `did` در نمونه‌های C#، این محیط `dotnet` نداشت؛ بنابراین بیلد C# در این
+> مرحله تکرار نشد. بیلدهای قبلی جدول مربوط به قبل از این تغییر هستند.
 
 ### دو شکست تست در کلون بالادستی (برای مرجع)
 

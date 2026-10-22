@@ -40,16 +40,21 @@ Environment override: `KEYGATE_BASE_URL=http://localhost:9000`.
 dotnet run -- pubkey
 
 # 2) Activate this device (license key is a stand-in; use your own test key)
-dotnet run -- activate --license-key KG-AAAA-BBBB-CCCC-DDDD --identifier my-test-machine
+dotnet run -- activate --license-key KG-AAAA-BBBB-CCCC-DDDD --identifier "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
 
 # 3) Verify and refresh the offline token
-dotnet run -- verify --license-key KG-AAAA-BBBB-CCCC-DDDD --identifier my-test-machine
+dotnet run -- verify --license-key KG-AAAA-BBBB-CCCC-DDDD --identifier "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
 
 # 4) Verify the saved token with no network
-dotnet run -- offline
+dotnet run -- offline --identifier "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
 ```
 
 Options: `--label "Office PC"`, `--token-file keygate-token.txt`.
+
+> The long `kgid:v1:...` value above is a fixed demo identifier. In a real app, compute
+> it from stable hardware/OS components at startup (never hardcode it). The server binds
+> the license to whatever identifier the first activation sends, and strict mode refuses
+> a different one after a hardware or OS change.
 
 ## Build
 

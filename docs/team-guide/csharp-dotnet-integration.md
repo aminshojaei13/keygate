@@ -4,12 +4,12 @@
 اعتبارسنجی و **آفلاین** بررسی می‌کند. کنار این سند، یک پروژهٔ نمونهٔ اجرایی در
 `examples/dotnet/Keygate.Sample/` قرار دارد که با کد همین سند یکی است.
 
-> **وضعیت بیلد (تأییدشده):** پروژه با `mcr.microsoft.com/dotnet/sdk:8.0` واقعاً بیلد شد:
-> `Build succeeded. 0 Warning(s), 0 Error(s)`.
-> علاوه بر آن، روی یک سرور Keygate واقعی (ایمیج `keygate-keygate:latest`، PostgreSQL 18)
-> چرخهٔ `verify` اجرا شد و امضای Ed25519 با خط `signature : VERIFIED` تأیید شد؛ سپس
-> `offline` با `--network none` (بدون هیچ دسترسی شبکه) توکن ذخیره‌شده را معتبر اعلام کرد.
-> <br>یک خطای واقعی هم در همین مسیر پیدا و اصلاح شد: امضای `Ed25519.Verify` در
+> **وضعیت بیلد:** نسخهٔ قبلی پروژه با `mcr.microsoft.com/dotnet/sdk:8.0` بیلد شده بود
+> (`0 Warning(s), 0 Error(s)`) و چرخهٔ `verify`/`offline` روی سرور واقعی تأیید شده بود.
+> تغییرات strict binding (پارامتر `expectedIdentifier` و بررسی `did`) در محیط فعلی
+> `dotnet` در دسترس نبود و دوباره بیلد نشد؛ پیش از انتشار یک بار
+> `dotnet build -c Release` را اجرا کنید.
+> <br>یک خطای واقعی در مسیر قبلی پیدا و اصلاح شد: امضای `Ed25519.Verify` در
 > BouncyCastle پارامتر طول کلید عمومی ندارد (`Verify(sig, sigOff, pk, pkOff, msg, msgOff, msgLen)`).
 
 ---
@@ -74,21 +74,24 @@ var client = new KeygateClient("http://localhost:9000");
 PublicKeyResult pk = await client.GetPublicKeyAsync();
 
 // 2) فعال‌سازی دستگاه
+// شناسه باید از مشخصات واقعی دستگاه ساخته شود (kgid:v1)؛ مقدار زیر فقط نمونه است.
+string identifier = "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7";
 ActivateResult act = await client.ActivateAsync(
     licenseKey: "KG-XXXX-XXXX-XXXX-XXXX",
-    identifier: "my-machine",
+    identifier: identifier,
     label: "Office PC");
 
 // 3) اعتبارسنجی / تازه‌سازی
-VerifyResult ver = await client.VerifyAsync("KG-XXXX-XXXX-XXXX-XXXX", "my-machine");
+VerifyResult ver = await client.VerifyAsync("KG-XXXX-XXXX-XXXX-XXXX", identifier);
 ```
 
 نکات:
 
 * این سه مسیر **عمومی**‌اند؛ هیچ API Key نمی‌خواهند. `license_key` خودش اعتبارنامه است.
-* `identifier` باید **پایدار و منحصربه‌فرد برای هر دستگاه** باشد. پیشنهاد: ترکیب
-  `MachineGuid` (ویندوز) یا `IOPlatformUUID` (مک)، یا یک UUID که در اولین اجرا ساخته و
-  در یک فایل محلی ذخیره می‌شود.
+* `identifier` باید از **مشخصات واقعی دستگاه** ساخته شود: `kgid:v1:<platform>:<64 hex>`.
+  در حالت پیش‌فرض strict، یک UUID تصادفیِ ذخیره‌شده روی دیسک برای فعال‌سازی جدید با
+  `400 IDENTIFIER_SCHEME_UNSUPPORTED` رد می‌شود، چون تغییر سخت‌افزار را نشان نمی‌دهد.
+  اگر مشخصات عوض شود، شناسهٔ `kgid` هم عوض می‌شود و سرور `409 DEVICE_CHANGED` می‌دهد.
 * `activate` روی همان دستگاه دوباره `status = "already_activated"` می‌دهد (خطا نیست).
 
 ---
@@ -255,11 +258,11 @@ cd examples/dotnet/Keygate.Sample
 dotnet run -- pubkey
 # انتظار: algorithm=ed25519, format=hex, public_key=<64 hex>
 
-dotnet run -- activate --license-key KG-TEST-TEST-TEST-TEST --identifier demo-1
+dotnet run -- activate --license-key KG-TEST-TEST-TEST-TEST --identifier "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
 # انتظار: status=activated یا already_activated + signature VERIFIED
 
-dotnet run -- offline
-# انتظار: Offline verification: OK (بدون تماس شبکه)
+dotnet run -- offline --identifier "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
+# انتظار: Offline verification: OK (بدون تماس شبکه، did مطابق دستگاه)
 ```
 
 کلید `KG-TEST-…` ساختگی است و فقط اگر روی سرور آزمایشی شما وجود داشته باشد کار می‌کند؛
@@ -296,8 +299,9 @@ docker run --rm -v "$PWD:/app" -w /app \
 
 اگر پروژهٔ موجود شما روی `netcoreapp3.1` است، نسخهٔ آمادهٔ همین نمونه در
 [`examples/dotnet/Keygate.Sample.NetCore31`](../../examples/dotnet/Keygate.Sample.NetCore31)
-هست. همان چهار دستور (`pubkey`, `activate`, `verify`, `offline`) را دارد و با
-`dotnet build -c Release` روی SDK 3.1 با `0 Warning(s), 0 Error(s)` بیلد می‌شود.
+هست. همان چهار دستور (`pubkey`, `activate`, `verify`, `offline`) را دارد. نسخهٔ قبلی آن
+با `dotnet build -c Release` روی SDK 3.1 با `0 Warning(s), 0 Error(s)` بیلد شده بود؛
+تغییرات strict binding هنوز روی این SDK دوباره بیلد نشده‌اند.
 
 تفاوت‌هایی که برای سازگاری لازم بود:
 

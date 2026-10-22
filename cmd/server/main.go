@@ -281,7 +281,7 @@ func main() {
 		logger.Error("LICENSE_SIGNING_KEY is unusable", "error", err)
 		os.Exit(1)
 	}
-	licenseSvc := service.NewLicenseService(db, licenseSigningPriv, logger, bf, webhookSvc)
+	licenseSvc := service.NewLicenseService(db, licenseSigningPriv, logger, bf, webhookSvc, cfg.StrictDeviceBinding)
 	usageSvc := service.NewUsageService(db, webhookSvc, emailSvc, logger, cfg.QuotaWarningThreshold)
 	seatSvc := service.NewSeatService(db, webhookSvc, emailSvc, logger, cfg.BaseURL)
 	entitlementSvc := service.NewEntitlementService(db, logger)
@@ -426,6 +426,7 @@ func main() {
 	expiryChecker := service.NewExpiryChecker(db, emailSvc, webhookSvc, logger)
 	meteredSyncer := service.NewMeteredBillingSyncer(db, logger)
 	adminH := handler.NewAdminHandler(db, webhookSvc, emailSvc, expiryChecker, meteredSyncer)
+	adminH.StrictDeviceBinding = cfg.StrictDeviceBinding
 	adminH.LicenseSvc = licenseSvc
 	// An update period may only be written once the links a public
 	// feed handed out have expired, and this is how long they live.
@@ -1115,7 +1116,7 @@ func main() {
 
 		// Self-service activation management — solves the "I lost my
 		// laptop, my activation slot is stuck" support ticket.
-		portalActH := handler.NewPortalActivationsHandler(db, webhookSvc)
+		portalActH := handler.NewPortalActivationsHandler(db, webhookSvc, cfg.StrictDeviceBinding)
 		portal.GET("/licenses/:license_key/activations", portalActH.List)
 		portal.DELETE("/licenses/:license_key/activations/:activation_id", portalActH.Delete)
 
@@ -1216,6 +1217,10 @@ func main() {
 
 		licWrite.POST("/licenses/:id/transfer", adminH.TransferLicense)
 		licWrite.POST("/licenses/:id/offline-token", adminH.IssueOfflineToken)
+		// Lifts the strict one-device binding after a legitimate
+		// hardware/OS change. Without it a strict license can never
+		// move to new hardware.
+		licWrite.POST("/licenses/:id/reset-device-binding", adminH.ResetDeviceBinding)
 
 		licWrite.POST("/activations/:id/deactivate", adminH.DeactivateActivation)
 		licWrite.POST("/activations/:id/reactivate", adminH.ReactivateActivation)
