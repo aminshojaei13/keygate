@@ -142,7 +142,8 @@ upstream image), so the code you cloned is the code that runs.
 
 ### 4. Open the app
 
-<http://localhost:9000> — the setup wizard creates the owner, product and default plan.
+use `http://<server-ip>:9000` (or your domain), and set
+`BASE_URL=https://your.domain` in `.env`.
 
 First login uses an email OTP. Without SMTP configured, the code is printed in the logs:
 
@@ -153,7 +154,7 @@ docker compose logs -f keygate | grep -i otp
 Health check and useful commands:
 
 ```bash
-curl -s http://localhost:9000/health
+curl -s http://<server-ip>:9000/health
 docker compose logs -f keygate     # follow logs
 docker compose down                # stop (data is kept)
 git pull && docker compose up -d --build   # update
@@ -181,7 +182,7 @@ make build
 ./bin/keygate
 ```
 
-Open <http://localhost:9000> (migrations run automatically on startup).
+Open <http://<server-ip>:9000> (migrations run automatically on startup).
 
 ### Troubleshooting
 
