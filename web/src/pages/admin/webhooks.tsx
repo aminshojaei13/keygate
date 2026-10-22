@@ -65,6 +65,7 @@ const WEBHOOK_EVENTS = [
   "license.created",
   "license.activated",
   "license.deactivated",
+  "license.device_reset",
   "license.expiry_changed",
   "license.expired",
   "license.canceled",

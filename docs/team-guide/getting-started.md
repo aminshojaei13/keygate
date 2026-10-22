@@ -96,6 +96,7 @@ openssl rand -hex 32
 | `DATABASE_URL` | — | رشتهٔ اتصال PostgreSQL |
 | `JWT_SECRET` | — (**الزامی**) | کلید امضای JWT نشست |
 | `LICENSE_SIGNING_KEY` | — (**الزامی**) | seed کلید خصوصی Ed25519 لایسنس (`openssl rand -hex 32`) |
+| `STRICT_DEVICE_BINDING` | `true` | یک دستگاه فعال per license؛ activate با مشخصات متفاوت → `409 DEVICE_CHANGED` و verify → `404`؛ آزادسازی فقط با ادمین. `false` = رفتار چنددستگاهی قدیمی |
 | `REDIS_URL` | خالی | فعال‌سازی محدودیت نرخ مشترک |
 | `RATE_LIMIT_API` | `60` | سقف درخواست عمومی در دقیقه |
 | `RATE_LIMIT_ADMIN` | `120` | سقف درخواست مدیریتی در دقیقه |

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"net/http"
 	"strings"
 	"time"
 
@@ -28,10 +29,15 @@ import (
 type PortalActivationsHandler struct {
 	store   *store.Store
 	webhook *service.WebhookService
+	// strict disables the self-service "free my slot" action. Under
+	// strict device binding a released slot is the loophole: the
+	// customer deletes the old device and activates new hardware with
+	// the same key. Only an admin reset is allowed to move the license.
+	strict bool
 }
 
-func NewPortalActivationsHandler(s *store.Store, webhook *service.WebhookService) *PortalActivationsHandler {
-	return &PortalActivationsHandler{store: s, webhook: webhook}
+func NewPortalActivationsHandler(s *store.Store, webhook *service.WebhookService, strictDeviceBinding bool) *PortalActivationsHandler {
+	return &PortalActivationsHandler{store: s, webhook: webhook, strict: strictDeviceBinding}
 }
 
 // portalActivationView is the slimmed-down activation row exposed to
@@ -129,6 +135,14 @@ func (h *PortalActivationsHandler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
+	// Strict binding: the portal must not be a second way to release
+	// the one slot that keeps the license on this device.
+	if h.strict {
+		response.Err(c, http.StatusForbidden, "DEACTIVATION_DISABLED",
+			"strict device binding is enabled; contact support to move this license to new hardware")
+		return
+	}
+
 	activationID := strings.TrimSpace(c.Param("activation_id"))
 	if activationID == "" {
 		response.BadRequest(c, "activation_id is required")

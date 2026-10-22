@@ -4,12 +4,12 @@
 منبع حقیقت، خود کد است؛ هرجا OpenAPI (`docs/openapi.yaml`) با پیاده‌سازی تفاوت داشته باشد، در
 `documentation-audit.md` ثبت شده است.
 
-**تعداد کل routeهای ثبت‌شده در این نسخه: ۱۵۱**
+**تعداد کل routeهای ثبت‌شده در این نسخه: ۱۵۲**
 
-مبنای این شمارش، `cmd/server/main.go` در شاخهٔ `security-enhancements` (HEAD = `1732796`) است:
-**۱۵۰** ثبت `GET/POST/PUT/PATCH/DELETE` به‌همراه **۱** ثبت `StaticFile("/docs/openapi.yaml")`.
+مبنای این شمارش، `cmd/server/main.go` در شاخهٔ `update-docs` (HEAD = `8124d95`) است:
+**۱۵۱** ثبت `GET/POST/PUT/PATCH/DELETE` به‌همراه **۱** ثبت `StaticFile("/docs/openapi.yaml")`.
 مسیرهای `/docs` و `/docs/` یک handler مشترک دارند و در یک عنوان مستند شده‌اند؛ به همین دلیل
-تعداد عنوان‌های endpoint در این فایل ۱۵۰ است، ولی routeهای ثبت‌شده ۱۵۱.
+تعداد عنوان‌های endpoint در این فایل ۱۵۱ است، ولی routeهای ثبت‌شده ۱۵۲.
 
 | دسته | تعداد | بخش |
 |---|---|---|
@@ -22,8 +22,8 @@
 | کاتالوگ عمومی پلن | ۱ | §۷ |
 | Stripe | ۲ | §۸ |
 | پورتال مشتری | ۱۶ | §۹ |
-| پنل/API مدیریتی | ۹۵ | §۱۰ |
-| **جمع** | **۱۵۱** | |
+| پنل/API مدیریتی | ۹۶ | §۱۰ |
+| **جمع** | **۱۵۲** | |
 
 ---
 
@@ -318,11 +318,11 @@
 | ۱۲ | نمونه | `curl -X POST .../license/activate -H 'Content-Type: application/json' -d '{"license_key":"KG-XXXX-XXXX-XXXX-XXXX","identifier":"kgid:v1:windows:<64hex>","previous_identifier":"550e8400-e29b-41d4-a716-446655440000","label":"Office PC"}'` |
 | ۱۳ | پاسخ موفق | `{"status":"activated","license_id":"...","token":"<b64>.<b64>","meta":{"server":"Keygate","url":"https://keygate.app"}}` (یا `status":"already_activated"`) |
 | ۱۴ | وضعیت | ۲۰۰ |
-| ۱۵ | خطاها | ۴۰۰ `BAD_REQUEST` (شناسهٔ نامعتبر/طولانی، `identifier_type` نامعتبر)، ۴۰۴ `LICENSE_NOT_FOUND`، ۴۰۴ `FEATURE_NOT_AVAILABLE`، **۴۰۹ `ACTIVATION_LIMIT`** (با `details.max`/`details.current`)، ۴۲۹ `LOCKED_OUT` (با `details.retry_after` و هدر `Retry-After`)، ۴۲۲ `IDEMPOTENCY_KEY_CONFLICT`، ۴۰۹ `IDEMPOTENCY_IN_FLIGHT`، ۵۰۰ `INTERNAL_ERROR` |
+| ۱۵ | خطاها | ۴۰۰ `BAD_REQUEST` (شناسهٔ نامعتبر/طولانی، `identifier_type` نامعتبر)، ۴۰۰ `IDENTIFIER_SCHEME_UNSUPPORTED` (حالت strict و شناسهٔ `uuid`/`opaque` برای binding جدید)، ۴۰۴ `LICENSE_NOT_FOUND`، ۴۰۴ `FEATURE_NOT_AVAILABLE`، **۴۰۹ `DEVICE_CHANGED`** (حالت strict: دستگاه/مشخصات متفاوت یا `previous_identifier`)، **۴۰۹ `ACTIVATION_LIMIT`** (فقط حالت tolerant؛ با `details.max`/`details.current`)، ۴۲۹ `LOCKED_OUT` (با `details.retry_after` و هدر `Retry-After`)، ۴۲۲ `IDEMPOTENCY_KEY_CONFLICT`، ۴۰۹ `IDEMPOTENCY_IN_FLIGHT`، ۵۰۰ `INTERNAL_ERROR` |
 | ۱۶ | نمونهٔ خطا | `{"success":false,"error":{"code":"ACTIVATION_LIMIT","message":"maximum activations reached","details":{"max":3,"current":3}}}` |
-| ۱۷ | اثر | درج در `activations` با `scheme` تشخیص‌داده‌شده (اتمیک تا سقف `plan.max_activations`)؛ audit `license/activated`؛ webhook `license.activated`. اگر `previous_identifier` بفرستید و آن رکورد فعال باشد، **همان رکورد درجا** به شناسهٔ جدید منتقل می‌شود (بدون مصرف سهم اضافه) و audit `migrated` ثبت می‌شود |
-| ۱۸ | امنیت | عبور از سقف‌ها اتمیک است؛ `Retry-After` برای backoff؛ مهاجرت شناسه فقط با دانستن **کلید لایسنس + شناسهٔ قبلی** ممکن است (در `security-review.md` به‌عنوان F-18 ثبت شده: مجاز دانستن، نه اثبات‌شده) |
-| ۱۹ | تست؟ | **بله** — `internal/handler/license_activation_test.go` (۱۲ تست، شامل مهاجرت شناسه و رد شناسهٔ دارای فاصله) |
+| ۱۷ | اثر | درج در `activations` با `scheme` تشخیص‌داده‌شده (اتمیک تا سقف `plan.max_activations`)؛ audit `license/activated`؛ webhook `license.activated`. در حالت پیش‌فرض strict، لایسنس فقط **یک** دستگاه فعال دارد؛ شناسهٔ متفاوت `DEVICE_CHANGED` می‌گیرد و `previous_identifier` پذیرفته نمی‌شود. در حالت tolerant، `previous_identifier` رکورد فعال را درجا منتقل می‌کند (بدون مصرف سهم اضافه) و audit `migrated` ثبت می‌شود |
+| ۱۸ | امنیت | عبور از سقف‌ها اتمیک است؛ `Retry-After` برای backoff؛ در حالت strict مهاجرت شناسه غیرفعال و آزادسازی سهم فقط با ادمین است (`reset-device-binding`). در حالت tolerant، مهاجرت با دانستن **کلید لایسنس + شناسهٔ قبلی** ممکن است (در `security-review.md` به‌عنوان F-18 ثبت شده: مجاز دانستن، نه اثبات‌شده) |
+| ۱۹ | تست؟ | **بله** — `internal/handler/license_activation_test.go` (شامل migration tolerant و شش تست strict binding) و `internal/service/strict_binding_test.go` |
 | ۲۰ | یادداشت | تکرار همان دستگاه → `already_activated` (نه خطا) |
 
 ### ۳.۲ `POST /api/v1/license/verify`
@@ -336,15 +336,15 @@
 | ۹ | بدنه | `{"license_key","identifier"}` |
 | ۱۰ | الزامی | هر دو |
 | ۱۱ | فیلدها | `identifier` ≤۲۵۶ |
-| ۱۲ | نمونه | `curl -X POST .../license/verify -d '{"license_key":"KG-...","identifier":"machine-abc"}' -H 'Content-Type: application/json'` |
+| ۱۲ | نمونه | `curl -X POST .../license/verify -d '{"license_key":"KG-...","identifier":"kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"}' -H 'Content-Type: application/json'` |
 | ۱۳ | پاسخ موفق | `{"status","plan_id","plan_name","valid_until?","updates_until?","features":{...},"token":"<b64>.<b64>","grace_days":7,"meta":{...},"external_customer_id?","external_workspace_id?"}` |
 | ۱۴ | وضعیت | ۲۰۰ |
-| ۱۵ | خطاها | ۴۰۰ `BAD_REQUEST`، ۴۰۴ `LICENSE_NOT_FOUND` (برای همهٔ حالت‌های غیرقابل‌استفاده/دستگاه فعال‌نشده)، ۴۰۴ `FEATURE_NOT_AVAILABLE`، ۴۲۹ `LOCKED_OUT`، ۵۰۰ `INTERNAL_ERROR` |
+| ۱۵ | خطاها | ۴۰۰ `BAD_REQUEST`، ۴۰۴ `LICENSE_NOT_FOUND` (برای همهٔ حالت‌های غیرقابل‌استفاده/دستگاه فعال‌نشده **و همچنین شناسهٔ تغییرکرده در حالت strict**)، ۴۰۴ `FEATURE_NOT_AVAILABLE`، ۴۲۹ `LOCKED_OUT`، ۵۰۰ `INTERNAL_ERROR` |
 | ۱۶ | نمونهٔ خطا | `{"success":false,"error":{"code":"LICENSE_NOT_FOUND","message":"license not found"}}` |
 | ۱۷ | اثر | `TouchActivation`؛ audit ندارد؛ webhook ندارد |
-| ۱۸ | امنیت | عمداً **همهٔ** شرایط منفی (منقضی/معلق/لغو/دستگاه نامعتبر) را به یک ۴۰۴ تبدیل می‌کند تا oracle نباشد |
+| ۱۸ | امنیت | عمداً **همهٔ** شرایط منفی (منقضی/معلق/لغو/دستگاه نامعتبر) را به یک ۴۰۴ تبدیل می‌کند تا oracle نباشد؛ در حالت strict، identifier باید **دقیقاً** با رکورد فعال برابر باشد |
 | ۱۹ | تست؟ | **بله** — `internal/service/license_test.go`، `license_features_integration_test.go` |
-| ۲۰ | یادداشت | توکن ویژگی‌های امضاشده (`ftr`) را حمل می‌کند |
+| ۲۰ | یادداشت | توکن ویژگی‌های امضاشده (`ftr`) و `did`/`fpr` را حمل می‌کند؛ کلاینت باید `did` را با شناسهٔ فعلی دستگاه مقایسه کند |
 
 ### ۳.۳ `POST /api/v1/license/deactivate`
 | # | مورد | مقدار |
@@ -354,12 +354,12 @@
 | ۳ | دسترسی | public |
 | ۹ | بدنه | `{"license_key","identifier"}` |
 | ۱۰ | الزامی | هر دو |
-| ۱۲ | نمونه | `curl -X POST .../license/deactivate -d '{"license_key":"KG-...","identifier":"machine-abc"}'` |
+| ۱۲ | نمونه | `curl -X POST .../license/deactivate -d '{"license_key":"KG-...","identifier":"kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"}'` |
 | ۱۳ | پاسخ موفق | `{"status":"deactivated"}` |
 | ۱۴ | وضعیت | ۲۰۰ |
-| ۱۵ | خطاها | ۴۰۰ `BAD_REQUEST`، ۴۰۴ `LICENSE_NOT_FOUND` (شامل دستگاه ناموجود)، ۴۰۴ `FEATURE_NOT_AVAILABLE`، ۴۲۹ `LOCKED_OUT`، ۵۰۰ `INTERNAL_ERROR` |
-| ۱۷ | اثر | **حذف نرم**: `status='deactivated'`، `deactivated_reason='client'`، `deactivated_at=now()`؛ audit `license/deactivated`؛ webhook `license.deactivated` |
-| ۱۸ | امنیت | «دستگاه ناموجود» هم به ۴۰۴ تبدیل می‌شود (ضد-oracle) |
+| ۱۵ | خطاها | ۴۰۰ `BAD_REQUEST`، ۴۰۴ `LICENSE_NOT_FOUND` (شامل دستگاه ناموجود)، ۴۰۴ `FEATURE_NOT_AVAILABLE`، **۴۰۳ `DEACTIVATION_DISABLED`** (حالت strict؛ فقط ادمین می‌تواند binding را آزاد کند)، ۴۲۹ `LOCKED_OUT`، ۵۰۰ `INTERNAL_ERROR` |
+| ۱۷ | اثر | **حذف نرم**: `status='deactivated'`، `deactivated_reason='client'`، `deactivated_at=now()`؛ audit `license/deactivated`؛ webhook `license.deactivated`. در حالت strict انجام نمی‌شود |
+| ۱۸ | امنیت | «دستگاه ناموجود» هم به ۴۰۴ تبدیل می‌شود (ضد-oracle)؛ در حالت strict، مسیر آزادسازی سهم بسته است تا rebind با کلید لایسنس ممکن نباشد |
 | ۱۹ | تست؟ | غیرمستقیم — `internal/store/activation_race_test.go` |
 
 ### ۳.۴ `POST /api/v1/license/entitlements`
@@ -957,9 +957,9 @@
 | ۶ | path | `:license_key`, `:activation_id` |
 | ۱۳ | پاسخ موفق | `{"status":"deleted"}` (متن پاسخ از قبل هست، ولی رکورد فیزیکی پاک نمی‌شود) |
 | ۱۴ | وضعیت | ۲۰۰ |
-| ۱۵ | خطاها | ۴۰۰ `BAD_REQUEST` (`activation_id is required`)، ۴۰۱ `UNAUTHORIZED`، ۴۰۴ `NOT_FOUND` (`license not found`/`activation not found`)، ۵۰۰ `INTERNAL_ERROR` |
-| ۱۷ | اثر | **حذف نرم** (`SoftDeactivateActivation` با دلیل `portal`)، audit `activation/deactivated` (actor_type `portal`)، webhook `license.deactivated` |
-| ۱۹ | تست؟ | ندارد |
+| ۱۵ | خطاها | ۴۰۰ `BAD_REQUEST` (`activation_id is required`)، ۴۰۱ `UNAUTHORIZED`، ۴۰۳ `DEACTIVATION_DISABLED` (حالت strict؛ فقط ادمین binding را آزاد می‌کند)، ۴۰۴ `NOT_FOUND` (`license not found`/`activation not found`)، ۵۰۰ `INTERNAL_ERROR` |
+| ۱۷ | اثر | **حذف نرم** (`SoftDeactivateActivation` با دلیل `portal`)، audit `activation/deactivated` (actor_type `portal`)، webhook `license.deactivated`. در حالت strict انجام نمی‌شود |
+| ۱۹ | تست؟ | **بله** — `TestStrictDeviceBinding_BlocksPortalDelete` |
 
 ### ۹.۱۲ `POST /api/v1/portal/subscription/change-plan`
 | # | مورد | مقدار |
@@ -1026,7 +1026,7 @@
 | ۱۷ | اثر | ساخت Checkout Session با متادیتای تمدید |
 | ۱۹ | تست؟ | **بله** — `internal/payment/renewal_test.go` (`TestRenewUpdates_Endpoint`) |
 
-## §۱۰. API مدیریتی (۹۵)
+## §۱۰. API مدیریتی (۹۶)
 
 سه گروه روی `/admin` که همه `SessionOrAPIKey` + `RateLimitByIPScoped("admin", cfg.RateLimitAdmin, 1m)` دارند:
 
@@ -1983,7 +1983,7 @@
 | ۹ | بدنه | `{"identifier":"uuid:...","label":"PC-Office"}` |
 | ۱۰ | الزامی | `identifier`؛ `label` اختیاری |
 | ۱۱ | فیلدها | `identifier` ≤۲۵۶ کاراکتر و بدون فاصلهٔ ابتدا/انتها؛ قالب‌های مجاز `uuid:…`، `sha256:<64hex>`، `kgid:v1:<platform>:<64hex>` یا مقدار opaque؛ `label` نام نمایشی |
-| ۱۲ | نمونه | `curl -X POST -b cookie.txt -H 'Content-Type: application/json' -d '{"identifier":"uuid:3f2a...","label":"PC-Office"}' http://localhost:9000/api/v1/admin/licenses/<id>/offline-token` |
+| ۱۲ | نمونه | `curl -X POST -b cookie.txt -H 'Content-Type: application/json' -d '{"identifier":"kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7","label":"PC-Office"}' http://localhost:9000/api/v1/admin/licenses/<id>/offline-token` |
 | ۱۳ | پاسخ موفق | `{"token":"<base64url(payload)>.<base64url(sig)>","status":"activated","license_id":"...","identifier":"uuid:..."}` (مقدار `status` مستقیماً از نتیجهٔ activate می‌آید؛ برای دستگاه تکراری `already_activated`) |
 | ۱۴ | وضعیت | ۲۰۰ |
 | ۱۵ | خطاها | ۴۰۰ (`INVALID_INPUT` برای شناسهٔ بدشکل)، ۴۰۱، ۴۰۳ `PRODUCT_SCOPE_MISMATCH`، ۴۰۴ `NOT_FOUND`، ۴۰۹ `ACTIVATION_LIMIT` (با `details.max/current`)، ۴۰۳ `LICENSE_REVOKED`/`LICENSE_SUSPENDED`/`LICENSE_EXPIRED`، ۴۲۹، ۵۰۰ |
@@ -1992,6 +1992,31 @@
 | ۱۸ | امنیت | کلید خصوصی امضا هرگز به کلاینت نمی‌رسد؛ توکن به دستگاه/شناسهٔ مشخصی گره می‌خورد و TTL دارد؛ شناسهٔ دارای فاصله عمداً رد می‌شود تا یک دستگاه دو سهم نگیرد |
 | ۱۹ | تست؟ | **بله** — `internal/handler/license_activation_test.go`، `internal/license/offline_test.go` |
 | ۲۰ | یادداشت | اگر فقط می‌خواهید توکن موجود را ببینید، از `GET .../licenses/:id` استفاده کنید؛ این endpoint وضعیت را تغییر می‌دهد |
+
+### ۱۰.۴.۲۴.۱ `POST /api/v1/admin/licenses/:id/reset-device-binding`
+
+| # | مورد | مقدار |
+|---|---|---|
+| ۱ | هدف | آزادکردن binding سخت‌گیرانهٔ دستگاه تا لایسنس بتواند روی سخت‌افزار جدید فعال شود (تنها راه مجاز در حالت strict) |
+| ۲ | متد و مسیر | `POST /api/v1/admin/licenses/:id/reset-device-binding` |
+| ۳ | دسترسی | protected |
+| ۴ | احراز هویت | session یا API Key |
+| ۵ | scope | `admin` یا `licenses:write` |
+| ۶ | path | `:id` = UUID لایسنس |
+| ۷ | query | — |
+| ۸ | هدرها | — |
+| ۹ | بدنه | — |
+| ۱۰ | الزامی | `:id` |
+| ۱۱ | فیلدها | — |
+| ۱۲ | نمونه | `curl -X POST -b cookie.txt http://localhost:9000/api/v1/admin/licenses/<id>/reset-device-binding` |
+| ۱۳ | پاسخ موفق | `{"status":"reset","license_id":"...","activations_released":1}` |
+| ۱۴ | وضعیت | ۲۰۰ |
+| ۱۵ | خطاها | ۴۰۱، ۴۰۳ `PRODUCT_SCOPE_MISMATCH`، ۴۰۴ `NOT_FOUND`، ۴۲۹، ۵۰۰ |
+| ۱۶ | نمونهٔ خطا | `{"success":false,"error":{"code":"NOT_FOUND","message":"license not found"}}` |
+| ۱۷ | اثر | همهٔ activationهای `active` این لایسنس به `deactivated` با `deactivated_reason='admin'` تبدیل می‌شوند؛ audit `license/device_binding_reset`؛ webhook `license.device_reset`. پس از آن اولین activate با شناسهٔ جدید (ترجیحاً `kgid:v1`) موفق می‌شود |
+| ۱۸ | امنیت | این endpoint جایگزین امن self-service است؛ فقط ادمین/API Key با scope لازم می‌تواند قفل را باز کند. تعداد آزادشده در پاسخ و audit ثبت می‌شود |
+| ۱۹ | تست؟ | **بله** — `TestStrictDeviceBinding_AdminResetAllowsRebind` |
+| ۲۰ | یادداشت | در حالت `STRICT_DEVICE_BINDING=false` لازم نیست، ولی بی‌خطر است و همان tombstoneهای ادمین را می‌سازد |
 
 ### ۱۰.۴.۲۵ `POST /api/v1/admin/activations/:id/deactivate`
 
@@ -2036,12 +2061,12 @@
 | ۱۲ | نمونه | `curl -X POST -b cookie.txt http://localhost:9000/api/v1/admin/activations/<id>/reactivate` |
 | ۱۳ | پاسخ موفق | `{"status":"reactivated","id":"..."}` |
 | ۱۴ | وضعیت | ۲۰۰ (اگر از قبل active باشد هم ۲۰۰ و بدون تغییر) |
-| ۱۵ | خطاها | ۴۰۱، ۴۰۳ `PRODUCT_SCOPE_MISMATCH`، ۴۰۴ `NOT_FOUND`، ۴۰۹ `ACTIVATION_LIMIT` (با `details.max/current`)، ۴۰۳ `LICENSE_REVOKED`/`LICENSE_SUSPENDED`/`LICENSE_EXPIRED`، ۴۲۹، ۵۰۰ |
-| ۱۶ | نمونهٔ خطا | `{"success":false,"error":{"code":"ACTIVATION_LIMIT","message":"maximum activations reached","details":{"max":3,"current":3}}}` |
-| ۱۷ | اثر | `status='active'`، پاک‌شدن `deactivated_at`/`deactivated_reason`؛ audit `activation/reactivated`؛ webhook `license.activated` |
-| ۱۸ | امنیت | شمارش سهم فقط ردیف‌های `status='active'` را می‌شمارد و زیر قفل ردیف لایسنس انجام می‌شود تا با فعال‌سازی هم‌زمان مسابقه نداشته باشد |
-| ۱۹ | تست؟ | **بله** — `internal/handler/license_activation_test.go` و `internal/store/activation_lifecycle_test.go` |
-| ۲۰ | یادداشت | برای دستگاه گم‌شده/تعویض‌شده مناسب است؛ اگر پلن کوچک شده باشد ممکن است `ACTIVATION_LIMIT` بگیرید |
+| ۱۵ | خطاها | ۴۰۱، ۴۰۳ `PRODUCT_SCOPE_MISMATCH`، ۴۰۴ `NOT_FOUND`، ۴۰۹ `DEVICE_CHANGED` (حالت strict و وجود دستگاه فعال دیگر)، ۴۰۹ `ACTIVATION_LIMIT` (فقط tolerant؛ با `details.max/current`)، ۴۰۳ `LICENSE_REVOKED`/`LICENSE_SUSPENDED`/`LICENSE_EXPIRED`، ۴۲۹، ۵۰۰ |
+| ۱۶ | نمونهٔ خطا | `{"success":false,"error":{"code":"DEVICE_CHANGED","message":"strict device binding allows one active device; deactivate the current device first","details":{"reason":"different_device","active":1}}}` |
+| ۱۷ | اثر | `status='active'`، پاک‌شدن `deactivated_at`/`deactivated_reason`؛ audit `activation/reactivated`؛ webhook `license.activated`. در حالت strict فقط وقتی مجاز است که هیچ دستگاه فعال دیگری نباشد |
+| ۱۸ | امنیت | شمارش سهم فقط ردیف‌های `status='active'` را می‌شمارد و زیر قفل ردیف لایسنس انجام می‌شود تا با فعال‌سازی هم‌زمان مسابقه نداشته باشد؛ در حالت strict سقف به ۱ کاهش می‌یابد |
+| ۱۹ | تست؟ | **بله** — `internal/handler/license_activation_test.go` (شامل `TestStrictDeviceBinding_AdminResetAllowsRebind`) و `internal/store/activation_lifecycle_test.go` |
+| ۲۰ | یادداشت | برای دستگاه گم‌شده/تعویض‌شده ابتدا دستگاه فعال را deactivate یا از `reset-device-binding` استفاده کنید؛ در حالت strict reactivation دستگاه دوم `DEVICE_CHANGED` می‌دهد |
 
 ### ۱۰.۵ API Keys (۴) — admin
 

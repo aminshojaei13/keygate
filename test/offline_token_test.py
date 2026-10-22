@@ -128,7 +128,11 @@ def verify_offline_token(
     # Device binding validation
     if expected_identifier:
         did = claims.get("did")
-        if did and did != expected_identifier:
+        if not did:
+            raise TokenVerificationError(
+                "token has no device identifier (did); an online verify is required"
+            )
+        if did != expected_identifier:
             raise TokenVerificationError(
                 f"device identifier mismatch: got {did}, want {expected_identifier}"
             )

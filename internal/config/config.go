@@ -23,6 +23,18 @@ type Config struct {
 	JWTSecret         string
 	LicenseSigningKey string
 
+	// StrictDeviceBinding makes a license usable on exactly one device
+	// binding at a time. Once a device has activated the license, any
+	// different identifier is rejected with DEVICE_CHANGED — including
+	// a client that reports a new hardware/OS fingerprint after an
+	// upgrade, a part swap, or an OS reinstall. Clients cannot release
+	// the slot themselves; an administrator must reset the binding.
+	//
+	// Default: true. Set STRICT_DEVICE_BINDING=false to restore the
+	// tolerant behaviour (multiple devices per plan, self-service
+	// deactivation, previous_identifier migration).
+	StrictDeviceBinding bool
+
 	StripeSecretKey     string
 	StripeWebhookSecret string
 	// StripeLivemode tells the webhook handler which environment to
@@ -126,6 +138,8 @@ func Load() (*Config, error) {
 		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
 	}
+
+	cfg.StrictDeviceBinding = envBoolOr("STRICT_DEVICE_BINDING", true)
 
 	envVal, envSet := os.LookupEnv("STRIPE_LIVEMODE")
 	cfg.StripeLivemode = deriveLivemode(envVal, envSet, cfg.StripeSecretKey)
@@ -367,6 +381,19 @@ func envFloatOr(key string, fallback float64) float64 {
 	if v := os.Getenv(key); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f
+		}
+	}
+	return fallback
+}
+
+// envBoolOr accepts the spellings strconv.ParseBool understands
+// (true/false, 1/0, t/f, yes/no is intentionally not included).
+// Unset or malformed values keep the fallback so a typo cannot
+// silently disable a security control.
+func envBoolOr(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
 		}
 	}
 	return fallback

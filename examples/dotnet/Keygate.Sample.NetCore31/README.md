@@ -7,9 +7,14 @@
 cd examples/dotnet/Keygate.Sample.NetCore31
 dotnet restore
 dotnet run -- pubkey
-dotnet run -- activate --license-key KG-TEST-TEST-TEST-TEST --identifier demo-1
-dotnet run -- offline
+dotnet run -- activate --license-key KG-TEST-TEST-TEST-TEST --identifier "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
+dotnet run -- offline --identifier "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
 ```
+
+> مقدار `kgid:v1:...` بالا یک شناسهٔ نمایشیِ ثابت است. در برنامهٔ واقعی آن را در startup
+> از مشخصات پایدار سخت‌افزار/سیستم‌عامل بسازید و هرگز hardcode نکنید؛ سرور لایسنس را به
+> همان شناسه‌ای می‌بندد که اولین activate می‌فرستد و بعد از تغییر سخت‌افزار/OS شناسهٔ
+> متفاوت را در حالت strict رد می‌کند.
 
 نکات:
 
@@ -20,7 +25,7 @@ dotnet run -- offline
   موجود است؛ برای پروژهٔ جدید از [`Keygate.Sample`](../Keygate.Sample) (net8.0) استفاده کنید.
 * هیچ API Key مدیریتی در این کلاینت وجود ندارد و فقط `license_key` + کلید عمومی مصرف می‌شود.
 
-بیلد و اجرا با Docker (تأیید شده):
+بیلد و اجرا با Docker (قبلاً تأیید شده؛ پس از تغییرات strict دوباره اجرا کنید):
 
 ```bash
 docker run --rm --platform linux/amd64 -v "$PWD":/src -w /src \

@@ -21,6 +21,7 @@ All configuration is provided via environment variables (or `.env` file).
 | `POSTGRES_DB` | String | No | `keygate` | Database name for bundled PostgreSQL service. |
 | `JWT_SECRET` | String (Hex/Base64) | **Yes** | *None* | Secret key for signing web session tokens (HMAC-SHA256). Must be at least 32 characters. |
 | `LICENSE_SIGNING_KEY` | String (Hex) | **Yes** | *None* | 32-byte Ed25519 seed encoded as 64 hex characters. Signs offline tokens and entitlement tokens. |
+| `STRICT_DEVICE_BINDING` | Boolean | No | `true` | One active device per license. Activation with a different hardware/OS identifier is refused with `409 DEVICE_CHANGED` (verification returns `404`); client/portal deactivation and `previous_identifier` migration are disabled. Only an admin can release the binding (`POST /admin/licenses/:id/reset-device-binding` is the dedicated action). Set `false` to restore multi-device/tolerant behavior. See [Authentication & security](team-guide/authentication-and-security.md) §12.4. |
 | `RELEASE_KEY_ENCRYPTION_KEY` | String (Hex) | **Conditional** | *None* | 32-byte AES-256-GCM master key (64 hex characters). Encrypts release signing keys and license keys at rest. Required if storage is enabled. |
 | `MIGRATIONS_DIR` | String | No | `db/migrations` | Path to directory containing `.up.sql` database migrations. |
 | `MIGRATE_ONLY` | Boolean | No | `false` | When set to `true`, applies pending database migrations and exits with status code 0. |

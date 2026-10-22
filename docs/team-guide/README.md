@@ -8,11 +8,11 @@
 > زبان: توضیحات فارسی‌اند. نام‌های فنی، مسیرها، نام endpointها، نام فیلدها، کدها و پیام‌های اصلی خطا
 > به‌صورت اصلی (انگلیسی) باقی مانده‌اند تا با کد و ترمینال قابل تطبیق باشند.
 
-> **وضعیت تأیید (اجرا شده روی همین شاخه):** `go vet ./...` و `go build ./...` بدون خطا؛
-> `go test ./...` بدون دیتابیس **همهٔ ۱۸ پکیج را پاس کرد** (تست‌های DB-محور skip شدند)؛
-> تست‌های پایتون (`sdk/python` + `test/*.py`) همه سبز؛ نمونهٔ C# روی .NET 8 با
-> `0 Warning(s), 0 Error(s)` بیلد شد و چرخهٔ activate → verify → offline به‌صورت end-to-end
-> تأیید شد. جزئیات و محدودیت‌ها در [`documentation-audit.md`](documentation-audit.md) §۱۱.
+> **وضعیت تأیید (اجرا شده روی همین شاخه):** `gofmt`، `go vet ./...` و `go build ./...` بدون خطا؛
+> `go test -p 1 ./...` با PostgreSQL 18 موقت همهٔ پکیج‌ها را پاس کرد (شامل شش تست strict device
+> binding). تست‌های پایتون در مرحلهٔ قبل سبز بودند. پس از تغییر بررسی `did` در نمونه‌های C#
+> این محیط `dotnet` نداشت و بیلد C# تکرار نشد. جزئیات و محدودیت‌ها در
+> [`documentation-audit.md`](documentation-audit.md) §۱۱.
 
 ## شروع سریع
 
@@ -143,7 +143,7 @@ LicenseSpring است.
 
 | فایل | موضوع |
 |---|---|
-| [`../device-identity.md`](../device-identity.md) | مشخصات پروتکل شناسهٔ دستگاه نسخهٔ ۱ (`kgid:v1`، مهاجرت با `previous_identifier`) |
+| [`../device-identity.md`](../device-identity.md) | مشخصات پروتکل شناسهٔ دستگاه نسخهٔ ۱ (`kgid:v1`، strict binding پیش‌فرض، حالت tolerant چنددستگاهی/`previous_identifier`؛ drift هنوز وصل نشده) |
 | [`../integrity-manifest-format.md`](../integrity-manifest-format.md) | قالب مانیفست صحت `keygate-integrity-v1` |
 | [`../integrity-verification.md`](../integrity-verification.md) | الگوریتم بررسی مانیفست و فایل‌های نصب‌شده |
 | [`../offline-licensing.md`](../offline-licensing.md) | مشخصات توکن آفلاین و قواعد اعتبارسنجی |

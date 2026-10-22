@@ -11,12 +11,12 @@
 
 The Keygate Device Identity Protocol defines a secure, versioned, platform-aware contract for associating client installations with software licenses. Across diverse execution environments—from desktop workstations and cloud servers to sandboxed mobile apps and web browsers—hardware characteristics and operating system privacy boundaries vary radically.
 
-To achieve robust licensing integrity without disabling legitimate customers, the protocol adheres to four core architectural principles:
+To achieve robust licensing integrity the protocol adheres to five core architectural principles:
 
 1. **Protocol Decoupled from Platform Implementation:** The server defines a canonical wire format and minimal verification contract. Clients may use platform-appropriate APIs without forcing identical hardware characteristics across operating systems.
 2. **Server-Authoritative Enforcement:** The server enforces activation limits and slot quotas independently. A client-supplied fingerprint is treated as an informative identifier and duplicate-detection heuristic, **not** as cryptographic proof of physical hardware identity.
 3. **Privacy by Construction:** Raw hardware serial numbers, MAC addresses, volume GUIDs, and usernames are **never** transmitted across the wire in plaintext. Identifiers are salted, normalized, and hashed client-side using public domain-separated domain tags. No server-only secrets reside in client binaries.
-4. **Tolerance to Hardware Evolution:** Legitimate hardware upgrades (e.g. disk replacement, NIC swap, OS reinstallation) must not silently orphan customer activations or cause spurious `409 ACTIVATION_LIMIT` refusals. Similarity scoring and an in-place migration protocol distinguish minor component drift from unauthorized multi-machine cloning.
+4. **Change Detection, Strict by Default:** A license is bound to the exact device identifier that activated it. Any hardware or OS change that alters the composite identifier is refused with `409 DEVICE_CHANGED`; clients cannot release the slot and `previous_identifier` migration is disabled. An administrator moves the license to new hardware with `POST /admin/licenses/:id/reset-device-binding`. The older multi-device policy returns with `STRICT_DEVICE_BINDING=false` (and the weighted-drift model described in §6 is defined there but not yet wired); it is **not** the default on this branch.
 5. **Separation from Application Integrity:** Device identification identifies the *execution host* and does not evaluate application binary integrity, code signatures, or tamper-resistance. Application binary integrity is maintained independently via Ed25519-signed update feeds (Sparkle, Velopack, Tauri minisign; see `docs/cryptographic-design.md`).
 
 ---
@@ -153,9 +153,56 @@ $$\text{Identifier} = \text{"kgid:v1:"} \parallel \text{platform} \parallel \tex
 
 ---
 
-## 5. Hardware-Change Tolerance & Scoring Policy
+## 5. Strict Device Binding (Default)
 
-### 5.1 Component Weights
+`STRICT_DEVICE_BINDING` is **true** on this branch. It replaces similarity scoring with an exact-identity rule:
+
+> A license may have exactly one active device. If the composite identifier changes for any reason — a replaced disk, a new NIC, an OS reinstall, a moved VM, or a client that switched from `uuid` to `kgid` — the server refuses the new identifier.
+
+### 5.1 Server Decision Table
+
+| Situation | Result |
+|---|---|
+| Same `identifier` activates again | `200 already_activated` + fresh token |
+| Same `identifier` verifies | `200` + fresh token |
+| Different `identifier` activates while one is active | `409 DEVICE_CHANGED` (`reason=different_device`) |
+| Different `identifier` verifies | `404 LICENSE_NOT_FOUND` (unchanged, avoids an existence oracle) |
+| `previous_identifier` differs from `identifier` | `409 DEVICE_CHANGED` (`reason=migration_disabled`) |
+| New activation with `uuid`/`opaque` identifier | `400 IDENTIFIER_SCHEME_UNSUPPORTED` |
+| Client `POST /license/deactivate` | `403 DEACTIVATION_DISABLED` |
+| Customer portal activation deletion | `403 DEACTIVATION_DISABLED` |
+| Admin reset | `200`, all active devices become tombstones; the next activation may use a new identifier |
+
+The strict rule is enforced inside the same license-row transaction that counts slots (`max=1`), so two devices racing cannot both activate. Plans may advertise `max_activations > 1`; strict mode still grants one live device, because a second device and a changed device are indistinguishable from the server's point of view.
+
+### 5.2 Compatibility and Recovery
+
+- **Existing `uuid`/`opaque` activations keep verifying.** Strict mode only rejects those schemes for *new* bindings, so upgrading the server does not immediately disconnect current customers. To move such a customer to `kgid`, an admin resets the binding and the client re-activates with a hardware-derived identifier.
+- **Only an administrator can move a license.** `POST /admin/licenses/:id/reset-device-binding` soft-deactivates every active device on the license. The customer can then activate on the new hardware; the audit log records `device_binding_reset`.
+- **The server cannot stop a process that is already running.** Enforcement happens on the next `activate`/`verify`. Clients must verify at startup and exit on failure; offline verifiers must compare the token's `did` (and `fpr` when present) with the identifier computed from the current machine. Until the offline token's `exp`, a changed machine can still present a validly signed token, so keep the plan's token TTL short when strict, near-real-time enforcement matters.
+- **No cryptographic proof.** A determined user with admin/root can spoof the client's component collection or patch the client's exit path. Strict mode detects honest hardware/OS changes and closes the server-side rebinding paths; it is not remote attestation. Proof-of-possession (§7.2) is the stronger, not-yet-wired option.
+
+### 5.3 Turning Strict Mode Off
+
+Set `STRICT_DEVICE_BINDING=false` to restore the tolerant policy below: multiple devices up to `max_activations`, client/portal deactivation, and `previous_identifier` migration. This is a deployment-wide switch, not a per-license setting.
+
+Strict mode applies to every activation row, including `identifier_type=user`; use the seat endpoints (or tolerant mode) for multi-user activations.
+
+Floating plans (`license_model=floating`) use the separate `floating_sessions` table and concurrent-session limits; strict mode does not cap them at one device. Use a standard license if you need one-device binding.
+
+---
+
+## 6. Tolerant Mode (STRICT_DEVICE_BINDING=false)
+
+> **Implementation status:** `deviceid.EvaluateDrift` is **not called** by `activate` or
+> `verify` on this branch. Tolerant mode currently means "strict off": multiple devices up
+> to `max_activations`, client/portal deactivation, and `previous_identifier` migration.
+> The weighted-drift model below is the intended design and is unit-tested in
+> `pkg/deviceid`, but it is not server behavior yet.
+
+The following weighted-drift policy is defined for future use when strict binding is disabled.
+
+### 6.1 Component Weights
 
 Keygate evaluates hardware similarity on a 100-point scale:
 
@@ -163,7 +210,7 @@ $$\text{Weight}_{\text{board}} = 35, \quad \text{Weight}_{\text{os}} = 25, \quad
 
 Total baseline weight = 100.
 
-### 5.2 Scoring Algorithm
+### 6.2 Scoring Algorithm
 
 When an existing device checks in with modified characteristics or presents a new composite fingerprint:
 
@@ -175,9 +222,9 @@ When an existing device checks in with modified characteristics or presents a ne
    - **Score $30 \dots 59$ (`review_ambiguous`):** Multiple major components were replaced simultaneously (e.g. motherboard + disk). If an unexpired offline token or cryptographic proof-of-possession is presented, in-place rebind is accepted. Otherwise, if the license has spare slots, activation proceeds with audit warning `device_drift_rebound`; if full, returns `409 ACTIVATION_LIMIT`.
    - **Score $< 30$ (`reject_different_device`):** The hardware signature represents an entirely different machine. The existing activation is preserved untouched. If the license is at maximum capacity, returns `409 ACTIVATION_LIMIT`.
 
-### 5.3 Hardware Change Tolerance Matrix
+### 6.3 Hardware Change Tolerance Matrix
 
-| Hardware Change Event | Affected Component | Typical Score | Server Decision |
+| Hardware Change Event | Affected Component | Typical Score | Model Decision (not enforced today) |
 |---|---|---|---|
 | Wi-Fi $\leftrightarrow$ Ethernet or USB NIC swap | `nic` (10 pts) | 90% | **`accept_same_device`** |
 | SSD / Hard Drive Upgrade | `disk` (20 pts) | 80% | **`accept_same_device`** |
@@ -192,9 +239,9 @@ When an existing device checks in with modified characteristics or presents a ne
 
 ---
 
-## 6. Server Enforcement & Security Architecture
+## 7. Server Enforcement & Security Architecture
 
-### 6.1 Transactional Slot Integrity
+### 7.1 Transactional Slot Integrity
 
 License activation limits are strictly enforced inside atomic database transactions taking an exclusive row lock on the parent license:
 
@@ -215,7 +262,26 @@ Inside this transaction, active activations (`status = 'active'`) are counted. I
 }
 ```
 
-### 6.2 Optional Stronger Device Binding (Cryptographic Proof-of-Possession)
+**Strict mode** runs the same transaction with `max=1` and refuses a different identifier even when the plan has free slots:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "DEVICE_CHANGED",
+    "message": "device characteristics changed; this license is bound to another device",
+    "details": {
+      "reason": "different_device",
+      "action": "contact_support",
+      "detail": "strict device binding is enabled; an administrator must reset the device binding before this license can run on new hardware"
+    }
+  }
+}
+```
+
+The pre-check (`CountActivations`) produces the same error before the transaction; the transactional `max=1` check covers the concurrent-first-activation race. Client and portal deactivation paths are disabled in strict mode because releasing the slot is equivalent to allowing a rebind.
+
+### 7.2 Optional Stronger Device Binding (Cryptographic Proof-of-Possession)
 
 For high-assurance deployments where user-space fingerprint spoofing or disk cloning must be cryptographically prevented, Keygate supports **Cryptographic Proof-of-Possession (DPoP)**:
 
@@ -232,15 +298,17 @@ For high-assurance deployments where user-space fingerprint spoofing or disk clo
 
 ---
 
-## 7. Migration Documentation & Backward Compatibility
+## 8. Migration Documentation & Backward Compatibility
 
-### 7.1 Backward Compatibility Invariants
+### 8.1 Backward Compatibility Invariants
 
-1. **Grandfathering:** All existing activation records (created before `kgid-v1`) with free-form or UUID identifiers continue to verify and deactivate without disruption.
-2. **Zero Breaking Changes:** Existing SDKs sending standard `{license_key, identifier}` without metadata continue to receive standard `200 OK` activation tokens.
+1. **Grandfathering:** Existing active activation records (created before `kgid-v1`) with free-form or UUID identifiers continue to verify. Client/portal deactivation is disabled while strict mode is on; an administrator releases the binding instead.
+2. **New bindings need a hardware scheme under strict mode.** Existing SDKs sending a raw UUID for a *new* activation receive `400 IDENTIFIER_SCHEME_UNSUPPORTED`; upgrade the client to `kgid:v1`/`sha256:` or set `STRICT_DEVICE_BINDING=false`. Existing UUID rows keep working, so the upgrade does not disconnect current devices.
 3. **Detection vs Enforcement:** `model.DetectIdentifierScheme` labels the scheme for administrative inspection (`legacy`, `uuid`, `sha256-v1`, `kgid-v1`, `opaque`).
 
-### 7.2 In-Place Client Migration Protocol
+### 8.2 In-Place Client Migration Protocol
+
+> **Disabled by default.** With `STRICT_DEVICE_BINDING=true`, any `previous_identifier` that differs from `identifier` is refused with `409 DEVICE_CHANGED` (`reason=migration_disabled`). The flow below applies only when strict mode is turned off.
 
 When an updated SDK upgrades its fingerprinting algorithm from an older scheme (e.g. `uuid` or `sha256-v1`) to `kgid-v1`, it presents `previous_identifier`:
 
@@ -269,7 +337,7 @@ Content-Type: application/json
 
 ---
 
-## 8. Test Fixtures & Verification Suite
+## 9. Test Fixtures & Verification Suite
 
 A machine-readable test fixture bundle is provided in `test/fixtures/device_identity_fixtures.json`, accompanied by automated test runners in Go (`pkg/deviceid/deviceid_test.go`, `internal/handler/license_activation_test.go`) and Python (`test/device_identity_test.py`).
 
@@ -285,7 +353,7 @@ The test suite validates:
 
 ---
 
-## 9. Legal & Attribution Notice (MANDATORY)
+## 10. Legal & Attribution Notice (MANDATORY)
 
 This software and protocol design are part of the Keygate licensing ecosystem, licensed under the **GNU Affero General Public License version 3 (AGPL v3)** with additional terms pursuant to Section 7(b).
 

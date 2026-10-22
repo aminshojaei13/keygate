@@ -16,7 +16,7 @@ public sealed class OfflineTokenException : Exception
 /// </summary>
 public static class OfflineToken
 {
-    public static VerifyToken VerifyAndParse(string token, byte[] publicKey)
+    public static VerifyToken VerifyAndParse(string token, byte[] publicKey, string? expectedIdentifier = null)
     {
         if (string.IsNullOrWhiteSpace(token))
             throw new OfflineTokenException("Token is empty.");
@@ -53,6 +53,18 @@ public static class OfflineToken
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         if (token1.ExpiresAt > 0 && now > token1.ExpiresAt)
             throw new OfflineTokenException("Token has expired; an online verify is required.");
+
+        // Strict device binding: the token names the machine it was
+        // issued to. If this machine's hardware/OS fingerprint has
+        // changed since then, the locally computed identifier no longer
+        // matches and the app must refuse to run instead of trusting a
+        // token that is still correctly signed.
+        if (!string.IsNullOrWhiteSpace(expectedIdentifier) &&
+            !string.Equals(token1.Identifier, expectedIdentifier, StringComparison.Ordinal))
+        {
+            throw new OfflineTokenException(
+                "Device identifier mismatch: this token belongs to different hardware or software.");
+        }
 
         return token1;
     }

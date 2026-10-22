@@ -34,6 +34,16 @@ type testHarness struct {
 }
 
 func setupActivationHarness(t *testing.T, maxActivations int) *testHarness {
+	return setupActivationHarnessWithStrict(t, maxActivations, false)
+}
+
+// setupStrictActivationHarness turns on strict device binding: one
+// device per license, no migration, no self-service deactivation.
+func setupStrictActivationHarness(t *testing.T, maxActivations int) *testHarness {
+	return setupActivationHarnessWithStrict(t, maxActivations, true)
+}
+
+func setupActivationHarnessWithStrict(t *testing.T, maxActivations int, strict bool) *testHarness {
 	t.Helper()
 	s := scratchStore(t)
 	gin.SetMode(gin.TestMode)
@@ -45,10 +55,10 @@ func setupActivationHarness(t *testing.T, maxActivations int) *testHarness {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	webhookSvc := service.NewWebhookService(s, logger, 2*time.Second, 1, false)
-	licSvc := service.NewLicenseService(s, priv, logger, nil, webhookSvc)
+	licSvc := service.NewLicenseService(s, priv, logger, nil, webhookSvc, strict)
 	licHandler := NewLicenseHandler(licSvc)
-	adminH := &AdminHandler{Store: s, Webhook: webhookSvc}
-	portalH := NewPortalActivationsHandler(s, webhookSvc)
+	adminH := &AdminHandler{Store: s, Webhook: webhookSvc, StrictDeviceBinding: strict}
+	portalH := NewPortalActivationsHandler(s, webhookSvc, strict)
 
 	ctx := context.Background()
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
@@ -704,3 +714,230 @@ func TestLicenseActivation_VersionMigrationWithPreviousIdentifier(t *testing.T) 
 	}
 }
 
+// ─── Strict device binding ───
+
+// Two kgid identifiers with different composite digests — exactly what
+// a board/NIC/disk/OS change produces.
+const (
+	strictKGIDa = "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
+	strictKGIDb = "kgid:v1:windows:aa11b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7"
+)
+
+func (h *testHarness) postVerify(body map[string]any) (int, map[string]any) {
+	b, _ := json.Marshal(body)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/license/verify", bytes.NewReader(b))
+	c.Request.Header.Set("Content-Type", "application/json")
+	h.licHandler.Verify(c)
+
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	return w.Code, resp
+}
+
+func respErrorCode(resp map[string]any) string {
+	errObj, ok := resp["error"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	s, _ := errObj["code"].(string)
+	return s
+}
+
+func TestStrictDeviceBinding_RejectsSecondDevice(t *testing.T) {
+	h := setupStrictActivationHarness(t, 3)
+	lic := h.createLicense(t, "strict@example.com", model.StatusActive, nil)
+
+	code, resp := h.postActivate(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDa})
+	if code != http.StatusOK {
+		t.Fatalf("first activate code = %d, body = %v", code, resp)
+	}
+
+	// A different hardware/OS fingerprint is refused even though the
+	// plan still has two free seats.
+	code, resp = h.postActivate(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDb})
+	if code != http.StatusConflict {
+		t.Fatalf("second activate code = %d, want 409, body = %v", code, resp)
+	}
+	if got := respErrorCode(resp); got != "DEVICE_CHANGED" {
+		t.Errorf("error code = %q, want DEVICE_CHANGED", got)
+	}
+
+	// The old device still works; the changed one cannot even verify.
+	if code, _ := h.postVerify(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDa}); code != http.StatusOK {
+		t.Errorf("verify old device = %d, want 200", code)
+	}
+	if code, _ := h.postVerify(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDb}); code != http.StatusNotFound {
+		t.Errorf("verify changed device = %d, want 404", code)
+	}
+
+	// Exactly one slot consumed, and a repeat activation is still fine.
+	code, resp = h.postActivate(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDa})
+	if code != http.StatusOK {
+		t.Fatalf("repeat activate code = %d, body = %v", code, resp)
+	}
+	if data, _ := resp["data"].(map[string]any); data["status"] != "already_activated" {
+		t.Errorf("repeat status = %v, want already_activated", data["status"])
+	}
+	count, err := h.store.CountActivations(context.Background(), lic.ID)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("active count = %d, want 1", count)
+	}
+}
+
+func TestStrictDeviceBinding_RejectsMigration(t *testing.T) {
+	h := setupStrictActivationHarness(t, 1)
+	lic := h.createLicense(t, "strict-migrate@example.com", model.StatusActive, nil)
+
+	if code, _ := h.postActivate(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDa}); code != http.StatusOK {
+		t.Fatalf("initial activate failed: %d", code)
+	}
+
+	code, resp := h.postActivate(map[string]any{
+		"license_key":         lic.LicenseKey,
+		"identifier":          strictKGIDb,
+		"previous_identifier": strictKGIDa,
+	})
+	if code != http.StatusConflict {
+		t.Fatalf("migration code = %d, want 409, body = %v", code, resp)
+	}
+	if got := respErrorCode(resp); got != "DEVICE_CHANGED" {
+		t.Errorf("error code = %q, want DEVICE_CHANGED", got)
+	}
+
+	// The original binding is untouched.
+	if _, err := h.store.FindActivation(context.Background(), lic.ID, strictKGIDa); err != nil {
+		t.Errorf("original activation should still be active: %v", err)
+	}
+	if _, err := h.store.FindActivation(context.Background(), lic.ID, strictKGIDb); err == nil {
+		t.Error("migrated identifier must not have been activated")
+	}
+}
+
+func TestStrictDeviceBinding_RejectsNonHardwareIdentifier(t *testing.T) {
+	h := setupStrictActivationHarness(t, 1)
+	lic := h.createLicense(t, "strict-uuid@example.com", model.StatusActive, nil)
+
+	code, resp := h.postActivate(map[string]any{
+		"license_key": lic.LicenseKey,
+		"identifier":  "a0b1c2d3-e4f5-4a6b-8c9d-0e1f2a3b4c5d",
+	})
+	if code != http.StatusBadRequest {
+		t.Fatalf("uuid activate code = %d, want 400, body = %v", code, resp)
+	}
+	if got := respErrorCode(resp); got != "IDENTIFIER_SCHEME_UNSUPPORTED" {
+		t.Errorf("error code = %q, want IDENTIFIER_SCHEME_UNSUPPORTED", got)
+	}
+}
+
+func TestStrictDeviceBinding_BlocksClientDeactivate(t *testing.T) {
+	h := setupStrictActivationHarness(t, 1)
+	lic := h.createLicense(t, "strict-deact@example.com", model.StatusActive, nil)
+	if code, _ := h.postActivate(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDa}); code != http.StatusOK {
+		t.Fatalf("activate failed")
+	}
+
+	b, _ := json.Marshal(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDa})
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/license/deactivate", bytes.NewReader(b))
+	c.Request.Header.Set("Content-Type", "application/json")
+	h.licHandler.Deactivate(c)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("deactivate code = %d, want 403", w.Code)
+	}
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if got := respErrorCode(resp); got != "DEACTIVATION_DISABLED" {
+		t.Errorf("error code = %q, want DEACTIVATION_DISABLED", got)
+	}
+	if count, _ := h.store.CountActivations(context.Background(), lic.ID); count != 1 {
+		t.Errorf("active count = %d, want 1 (binding must survive)", count)
+	}
+}
+
+func TestStrictDeviceBinding_BlocksPortalDelete(t *testing.T) {
+	h := setupStrictActivationHarness(t, 1)
+	lic := h.createLicense(t, "strict-portal@example.com", model.StatusActive, nil)
+	if code, _ := h.postActivate(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDa}); code != http.StatusOK {
+		t.Fatalf("activate failed")
+	}
+	act, err := h.store.FindActivation(context.Background(), lic.ID, strictKGIDa)
+	if err != nil {
+		t.Fatalf("find activation: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Params = gin.Params{
+		{Key: "license_key", Value: lic.LicenseKey},
+		{Key: "activation_id", Value: act.ID},
+	}
+	c.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/portal/licenses/"+lic.LicenseKey+"/activations/"+act.ID, nil)
+	c.Set("email", lic.Email)
+	h.portalH.Delete(c)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("portal delete code = %d, want 403", w.Code)
+	}
+	if count, _ := h.store.CountActivations(context.Background(), lic.ID); count != 1 {
+		t.Errorf("active count = %d, want 1 (binding must survive)", count)
+	}
+}
+
+func TestStrictDeviceBinding_AdminResetAllowsRebind(t *testing.T) {
+	h := setupStrictActivationHarness(t, 1)
+	lic := h.createLicense(t, "strict-reset@example.com", model.StatusActive, nil)
+	if code, _ := h.postActivate(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDa}); code != http.StatusOK {
+		t.Fatalf("activate failed")
+	}
+	if code, _ := h.postActivate(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDb}); code != http.StatusConflict {
+		t.Fatalf("changed device should be refused before reset")
+	}
+	oldAct, err := h.store.FindActivation(context.Background(), lic.ID, strictKGIDa)
+	if err != nil {
+		t.Fatalf("find old activation: %v", err)
+	}
+
+	// Admin releases the binding.
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "id", Value: lic.ID}}
+	c.Request = httptest.NewRequest(http.MethodPost, "/admin/licenses/"+lic.ID+"/reset-device-binding", nil)
+	c.Set("role", "admin")
+	c.Set("api_key", &model.APIKey{ProductID: h.product.ID})
+	h.adminH.ResetDeviceBinding(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("reset code = %d, want 200, body = %s", w.Code, w.Body.String())
+	}
+
+	// The new machine can now take the single slot.
+	code, resp := h.postActivate(map[string]any{"license_key": lic.LicenseKey, "identifier": strictKGIDb})
+	if code != http.StatusOK {
+		t.Fatalf("activate after reset code = %d, body = %v", code, resp)
+	}
+	if _, err := h.store.FindActivation(context.Background(), lic.ID, strictKGIDb); err != nil {
+		t.Errorf("new identifier should be active after reset: %v", err)
+	}
+
+	// Reactivating the old tombstone must not create a second live
+	// device behind strict mode's back.
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "id", Value: oldAct.ID}}
+	c.Request = httptest.NewRequest(http.MethodPost, "/admin/activations/"+oldAct.ID+"/reactivate", nil)
+	c.Set("role", "admin")
+	c.Set("api_key", &model.APIKey{ProductID: h.product.ID})
+	h.adminH.ReactivateActivation(c)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("reactivate old device code = %d, want 409, body = %s", w.Code, w.Body.String())
+	}
+	if count, _ := h.store.CountActivations(context.Background(), lic.ID); count != 1 {
+		t.Errorf("active count = %d, want 1 after refused reactivation", count)
+	}
+}

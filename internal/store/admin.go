@@ -779,9 +779,12 @@ func (s *Store) TransferLicense(ctx context.Context, licenseID, newEmail string,
 	return releasedCount, err
 }
 
-// ReactivateActivation reactivates a deactivated activation slot within the plan's limit.
-// Under the license row lock to serialize with concurrent activations and transfers.
-func (s *Store) ReactivateActivation(ctx context.Context, activationID string) error {
+// ReactivateActivation restores a tombstoned device within the plan's
+// limit. Under the license row lock to serialize with concurrent
+// activations and transfers. maxOverride lets strict mode cap the
+// license at one active device without duplicating the transaction;
+// existing callers pass nothing and keep max_activations.
+func (s *Store) ReactivateActivation(ctx context.Context, activationID string, maxOverride ...int) error {
 	return s.RunInTx(ctx, func(txCtx context.Context, tx bun.Tx) error {
 		act := new(model.Activation)
 		err := tx.NewSelect().Model(act).Where("id = ?", activationID).Scan(txCtx)
@@ -820,6 +823,9 @@ func (s *Store) ReactivateActivation(ctx context.Context, activationID string) e
 		maxActivations := 3
 		if lic.Plan != nil && lic.Plan.MaxActivations > 0 {
 			maxActivations = lic.Plan.MaxActivations
+		}
+		if len(maxOverride) > 0 && maxOverride[0] > 0 {
+			maxActivations = maxOverride[0]
 		}
 
 		var count int

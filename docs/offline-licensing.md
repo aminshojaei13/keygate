@@ -153,6 +153,12 @@ flowchart TD
    - If `ExpectedIdentifier` is configured:
      - Assert `token.did == ExpectedIdentifier`.
      - Compute $\text{expected\_fpr} = \text{hex}(\text{sha256}(\text{did} + \text{":"} + \text{pid})[:8])$ and assert `token.fpr == expected_fpr`.
+   - **Strict device binding (server default) makes `ExpectedIdentifier` mandatory.**
+     Compute it from the current machine (`kgid:v1:<platform>:<64-hex>`) and reject the
+     token when `did` differs. A hardware/OS change must stop the app even though the
+     signature is still valid. The server cannot terminate a running process; enforcement
+     is only as strong as this startup check. Keep `exp` short when near-real-time
+     enforcement matters.
 9. **Feature & Entitlement Enforcement:**
    - Check that requested feature flags exist in `token.ftr` and evaluate to truthy values.
 

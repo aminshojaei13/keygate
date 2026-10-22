@@ -62,7 +62,7 @@ base64url(payload_json) + "." + base64url(signature)
   "pid": "prod_01ABCD",
   "pln": "plan_pro",
   "sts": "active",
-  "did": "machine-abc",
+  "did": "kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7",
   "ftr": { "export": true, "seats": 5 },
   "iat": 1760000000,
   "exp": 1760604800,
@@ -125,7 +125,9 @@ GET /api/v1/license/pubkey
    * اگر `exp > 0 && now > exp` → توکن منقضی است (باید دوباره verify آنلاین شود).
    * اگر `vun > 0 && now > vun + (grc * 86400)` → لایسنس واقعاً مرده است.
    * اگر `upd > 0` → نسخه‌های منتشرشده بعد از `upd` نباید نصب شوند.
-7. اختیاری: `fpr == SHA256(identifier + ":" + product_id)[0..8]` را برای تطبیق دستگاه بررسی کنید.
+7. **الزامی در حالت strict:** `did` را با `identifier` فعلی دستگاه مقایسه کنید؛ اگر
+   برابر نبود، توکن متعلق به سخت‌افزار/نرم‌افزار دیگری است و باید رد شود. در صورت وجود
+   `fpr`، آن را هم با `SHA256(identifier + ":" + product_id)[0..8]` بررسی کنید.
 
 > **مهم:** بررسی امضا را همیشه **قبل از** اعتماد به محتوای payload انجام دهید.
 
@@ -164,6 +166,11 @@ func Fingerprint(identifier, productID string) string {
 
 * یک توکن که از دستگاه A لو برود، روی دستگاه B (با همان کلید لایسنس ولی `identifier` متفاوت)
   قابل استفاده نیست، چون `fpr` روی `(identifier, product_id)` بسته می‌شود.
+* در حالت پیش‌فرض strict، **بررسی `did` اختیاری نیست**: کلاینت باید شناسه را از مشخصات
+  فعلی دستگاه بسازد (`kgid:v1`) و با `did` مقایسه کند. اگر یک قطعه یا شناسهٔ نصب OS عوض
+  شود، `did` دیگر تطبیق نمی‌کند و برنامه باید اجرا نشود، حتی اگر امضای توکن معتبر باشد.
+* سرور نمی‌تواند یک برنامهٔ در حال اجرا را متوقف کند؛ این بررسی سمت کلاینت است. برای
+  کوتاه‌کردن پنجرهٔ آفلاین، `token_ttl_days` پلن را کم کنید.
 
 ---
 
@@ -175,21 +182,32 @@ func Fingerprint(identifier, productID string) string {
   2. اگر توکن نداریم یا منقضی شده → تلاش برای verify آنلاین:
        POST /api/v1/license/verify {license_key, identifier}
      - موفق → توکن جدید را ذخیره کن.
-     - 404 LICENSE_NOT_FOUND → لایسنس نامعتبر/غیرفعال.
+     - 404 LICENSE_NOT_FOUND → لایسنس نامعتبر/غیرفعال، یا (در حالت strict) شناسهٔ
+       دستگاه تغییر کرده است. اجرا را متوقف کن و پیام بازیابی نشان بده.
      - خطای شبکه → در بازهٔ مهلت با توکن قدیمی ادامه بده، وگرنه (اگر grc=0) قفل کن.
   3. برای اولین فعال‌سازی روی دستگاه جدید:
        POST /api/v1/license/activate {license_key, identifier}
+     - 409 DEVICE_CHANGED → سخت‌افزار/نرم‌افزار تغییر کرده و لایسنس به دستگاه دیگری
+       بسته است. اجرا را متوقف کن و پیام بازیابی (تماس با پشتیبانی برای
+       `reset-device-binding`) نشان بده.
+     - 400 IDENTIFIER_SCHEME_UNSUPPORTED → شناسه از جنس سخت‌افزار نیست؛ کلاینت باید
+       `kgid:v1`/`sha256:` بفرستد.
+  4. اگر کاربر روی همین دستگاه دوباره activate کند → 200 `already_activated` (خطا نیست).
 ```
 
 نکات:
 
 * `activate` و `verify` هر دو `token` می‌دهند؛ تفاوت در این است که `activate` رکورد دستگاه را
-  می‌سازد (تو سقف پلن) و `verify` فقط بررسی می‌کند.
+  می‌سازد (تا سقف پلن؛ در حالت strict فقط یک دستگاه) و `verify` فقط بررسی می‌کند.
 * تکرار `activate` برای همان دستگاه، `already_activated` می‌دهد (خطا نیست).
-* برای آزادکردن یک سهم روی دستگاه دیگری، `POST /license/deactivate`.
-* اگر الگوریتم شناسهٔ دستگاه را عوض کردید (مثلاً از UUID به `kgid:v1`)، در اولین
-  `activate` فیلد `previous_identifier` را با شناسهٔ قبلی بفرستید تا **همان رکورد** منتقل شود
-  و سهم جدیدی مصرف نشود (audit: `migrated`).
+* در حالت پیش‌فرض strict، `POST /license/deactivate` با `403 DEACTIVATION_DISABLED`
+  رد می‌شود؛ آزادکردن سهم فقط با ادمین است. در حالت tolerant، این فراخوانی سهم را
+  آزاد می‌کند.
+* در حالت strict، `previous_identifier` پذیرفته نمی‌شود و `409 DEVICE_CHANGED`
+  (`reason=migration_disabled`) می‌دهد. برای انتقال لایسنس به دستگاه جدید، ادمین باید
+  `POST /admin/licenses/:id/reset-device-binding` را صدا بزند؛ سپس کلاینت با
+  `identifier` جدید (ترجیحاً `kgid:v1`) دوباره `activate` می‌کند. در حالت tolerant،
+  `previous_identifier` رکورد فعال را درجا منتقل می‌کند (audit: `migrated`).
 
 ### ۹.۱ مسیر جایگزین: توکن صادرشده توسط ادمین
 
@@ -198,7 +216,7 @@ func Fingerprint(identifier, productID string) string {
 
 ```bash
 curl -X POST -b cookie.txt -H 'Content-Type: application/json' \
-  -d '{"identifier":"uuid:3f2a...","label":"PC-Office"}' \
+  -d '{"identifier":"kgid:v1:windows:5581b5a7b290e096fdea9b19916561e13d15fc983a9b57c53a9e5ad91f29f4b7","label":"PC-Office"}' \
   http://localhost:9000/api/v1/admin/licenses/<license_id>/offline-token
 # → {"success":true,"data":{"token":"<payload>.<sig>","status":"activated",...}}
 ```
@@ -209,6 +227,10 @@ curl -X POST -b cookie.txt -H 'Content-Type: application/json' \
   `GET /api/v1/license/pubkey` بررسی کند.
 * `identifier` باید دقیقاً همان چیزی باشد که کلاینت در `verify` می‌فرستد (وگرنه `did` تطبیق
   نمی‌کند). شناسهٔ دارای فاصله در ابتدا/انتها رد می‌شود.
+* در حالت strict، برای فعال‌سازی جدید شناسه باید `kgid:v1:...` یا `sha256:...` باشد؛
+  شناسهٔ `uuid`/`opaque` با `400 IDENTIFIER_SCHEME_UNSUPPORTED` رد می‌شود.
+* اگر توکن را از قبل داخل نصب‌کننده گذاشته‌اید، مطمئن شوید `identifier` آن با شناسه‌ای که
+  برنامه در اولین اجرا محاسبه می‌کند یکی است؛ در غیر این صورت `did` رد می‌شود.
 
 ---
 

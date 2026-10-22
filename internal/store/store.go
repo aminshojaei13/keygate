@@ -1288,6 +1288,25 @@ func (s *Store) SoftDeactivateActivation(ctx context.Context, id, reason string)
 	return n == 1, nil
 }
 
+// SoftDeactivateAllActivations releases every active device on a
+// license in one statement. Used by the admin "reset device binding"
+// action: with strict binding each license has at most one active
+// device, but the method is written for N so it also cleans up rows
+// created before strict mode was turned on. Returns the number of
+// devices released.
+func (s *Store) SoftDeactivateAllActivations(ctx context.Context, licenseID, reason string) (int, error) {
+	res, err := s.DB.NewUpdate().Model((*model.Activation)(nil)).
+		Set("status = ?, deactivated_at = now(), deactivated_reason = ?",
+			model.ActivationDeactivated, reason).
+		Where("license_id = ? AND status = ?", licenseID, model.ActivationActive).
+		Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 func (s *Store) DeleteActivation(ctx context.Context, id string) error {
 	_, err := s.DB.NewDelete().Model((*model.Activation)(nil)).Where("id = ?", id).Exec(ctx)
 	return err
@@ -2296,7 +2315,6 @@ func (s *Store) MigrateActivationIdentifier(ctx context.Context, licenseID, oldI
 	}
 	return oldAct, nil
 }
-
 
 // ─── Email Queue ───
 
