@@ -20,6 +20,8 @@
 - می‌خواهید معماری را بفهمید؟ → [`architecture.md`](architecture.md)
 - می‌خواهید API را صدا بزنید؟ → [`api-reference.md`](api-reference.md)
 - می‌خواهید کلاینت C#/.NET بنویسید؟ → [`csharp-dotnet-integration.md`](csharp-dotnet-integration.md)
+- می‌خواهید سناریوهای لایسنس (strict/tolerant، تغییر فایل، تغییر دستگاه) را تکرارپذیر تست کنید؟
+  → [`examples/dotnet/Keygate.Lab/README.md`](../../examples/dotnet/Keygate.Lab/README.md)
 - می‌خواهید Keygate را به یک نرم‌افزار جدید وصل کنید؟ → [`python-and-typescript-examples.md`](python-and-typescript-examples.md)
 - می‌خواهید بفهمید کدام مستند قابل‌اعتماد نیست؟ → [`documentation-audit.md`](documentation-audit.md)
 
