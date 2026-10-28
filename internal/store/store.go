@@ -2229,7 +2229,8 @@ func (s *Store) ActivateWithinLimit(ctx context.Context, act *model.Activation, 
 	// revived in place.
 	err = tx.NewInsert().Model(act).
 		Column("id", "license_id", "identifier", "identifier_type",
-			"scheme", "status", "label", "ip_address").
+			"scheme", "status", "label", "ip_address",
+			"device_public_key", "device_key_alg").
 		On("CONFLICT (license_id, identifier) DO UPDATE").
 		Set("status = EXCLUDED.status").
 		Set("deactivated_at = NULL").
@@ -2237,6 +2238,14 @@ func (s *Store) ActivateWithinLimit(ctx context.Context, act *model.Activation, 
 		Set("scheme = EXCLUDED.scheme").
 		Set("label = EXCLUDED.label").
 		Set("ip_address = EXCLUDED.ip_address").
+		// A revived tombstone is a fresh activation: the machine may
+		// have been re-imaged, so take the key the client presents now
+		// rather than keeping a stale one it no longer holds the
+		// private half of. An active row never reaches this branch —
+		// the caller returns ErrAlreadyActivated and re-binds through
+		// UpdateActivationDeviceKey instead, which refuses a swap.
+		Set("device_public_key = EXCLUDED.device_public_key").
+		Set("device_key_alg = EXCLUDED.device_key_alg").
 		Set("last_verified = now()").
 		Returning("id").Scan(ctx, &act.ID)
 	switch {

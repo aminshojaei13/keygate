@@ -1,8 +1,4 @@
-<div align="center">
-
-<img src="web/public/logo.svg" width="72" height="72" alt="Keygate" />
-
-# Keygate
+<img src="web/public/logo.svg" alt="Keygate" width="72" /># Keygate
 
 **Open source software license management platform.**
 
@@ -10,28 +6,11 @@ The self-hosted alternative to Keygen, Cryptlex, and LicenseSpring.
 
 [Website](https://keygate.app) · [Documentation](https://keygate.app/docs) · [Community](https://github.com/tabloy/keygate/discussions)
 
-[![License](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/tabloy/keygate?label=release&color=green)](https://github.com/tabloy/keygate/releases)
-[![Stars](https://img.shields.io/github/stars/tabloy/keygate?style=flat)](https://github.com/tabloy/keygate/stargazers)
-[![Sponsor](https://img.shields.io/badge/sponsor-❤-ff69b4)](https://ko-fi.com/alanisme)
+![License](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)![Release](https://img.shields.io/github/v/release/tabloy/keygate?label=release&color=green)![Stars](https://img.shields.io/github/stars/tabloy/keygate?style=flat)![Sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-ff69b4)[**English**](README.md) · [**简体中文**](README.zh-CN.md) · [**فارسی**](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/team-guide/README.md)
 
-**[English](README.md)** · **[简体中文](README.zh-CN.md)** · **[فارسی](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/team-guide/README.md)**
+> **Fork:** `aminshojaei13/keygate` — a fork of `tabloy/keygate`. Active work lives on the `update-docs`branch; `main` tracks upstream. See [What's in this fork](#whats-in-this-fork) below.
 
-<br />
-
-> **Fork:** [`aminshojaei13/keygate`](https://github.com/aminshojaei13/keygate) — a fork of
-> [`tabloy/keygate`](https://github.com/tabloy/keygate). Active work lives on the
-> [`update-docs`](https://github.com/aminshojaei13/keygate/tree/update-docs)
-> branch; `main` tracks upstream. See [What's in this fork](#whats-in-this-fork) below.
-
-
-<br />
-
-<img src="web/public/screenshot.png" width="800" alt="Keygate Dashboard" />
-
-</div>
-
-<br />
+<img src="web/public/screenshot.png" alt="Keygate Dashboard" width="800" />
 
 ## Why Keygate?
 
@@ -43,22 +22,18 @@ Commercial license platforms charge per-seat, per-month, and your customer data 
 
 One server. One database. Full control. Free, forever.
 
-<br />
-
 ## Who is it for?
 
-| | |
-|:---|:---|
+|  |  |
+| --- | --- |
 | **🧑‍💻 Indie Developers** — Selling a desktop app, CLI tool, or Electron app? Keygate handles license keys, activation limits, and trials so you can focus on shipping. | **🏢 SaaS Companies** — Managing subscription tiers with different feature sets? Define plans with entitlements, track usage, and let Stripe handle billing automatically. |
 | **🏭 Enterprise Vendors** — Need floating licenses for large teams? Concurrent seat checkout with heartbeat monitoring, perfect for shared-seat environments. | **⚡ API Providers** — Enforcing rate limits and usage quotas? Atomic quota enforcement tracks every call and warns customers before they hit limits. |
-
-<br />
 
 ## Features
 
 ### 🔑 License Management
 
-Every model in one platform — **subscriptions**, **perpetual**, **perpetual with a maintenance period** (buy once, get a year of updates, renew from the portal), **trials**, and **floating** (concurrent) licenses. Create, activate, verify, suspend, reinstate, and revoke with full audit trail. Per-device or per-user activation limits with **atomic enforcement** (no double-counting under retry). Grace periods. License keys hashed with SHA-256, encrypted at rest. Signed tokens for offline verification. **`Idempotency-Key` header** support on writes — retries never duplicate.
+Every model in one platform — **subscriptions**, **perpetual**, **perpetual with a maintenance period** (buy once, get a year of updates, renew from the portal), **trials**, and **floating** (concurrent) licenses. Create, activate, verify, suspend, reinstate, and revoke with full audit trail. Per-device or per-user activation limits with **atomic enforcement** (no double-counting under retry). Grace periods. License keys hashed with SHA-256, encrypted at rest. Signed tokens for offline verification. `Idempotency-Key` **header** support on writes — retries never duplicate.
 
 Public SDK endpoints (activate / verify / deactivate / usage / download) take `license_key` directly — no embedded API keys to leak from your binaries. Customers can self-serve activation slots from the portal (free up a lost laptop without a support ticket).
 
@@ -96,13 +71,9 @@ Email OTP login with constant-time hash verification, role-based access checked 
 
 A Go server + PostgreSQL + (optional) S3-compatible storage for release artifacts. No Redis, no microservices. Auto-migration on startup. Setup wizard for first run. Custom branding, email templates, and i18n (English/Chinese built-in).
 
-<br />
-
 ## Quick Start
 
-**Requirements:** Docker 24+ and Docker Compose v2.24+ (the compose file uses
-`env_file: required: false`). Nothing else is needed — Go, Node and PostgreSQL all run inside
-containers.
+**Requirements:** Docker 24+ and Docker Compose v2.24+ (the compose file uses `env_file: required: false`). Nothing else is needed — Go, Node and PostgreSQL all run inside containers.
 
 ### 1. Clone
 
@@ -123,13 +94,9 @@ sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -hex 32)|" .env && rm -f 
 sed -i.bak "s|^LICENSE_SIGNING_KEY=.*|LICENSE_SIGNING_KEY=$(openssl rand -hex 32)|" .env && rm -f .env.bak
 ```
 
-Optional, but recommended: set `ADMIN_EMAILS=you@example.com` in `.env`. When it is set, only
-that address can claim the first-run owner account.
+Optional, but recommended: set `ADMIN_EMAILS=you@example.com` in `.env`. When it is set, only that address can claim the first-run owner account.
 
-`.env.example` enables `STRICT_DEVICE_BINDING=true`: a license is bound to the first
-hardware-derived identifier, and a different device is refused with `409 DEVICE_CHANGED`.
-See [Authentication & security](docs/team-guide/authentication-and-security.md) §12.4 for the
-client checklist and the admin reset action.
+`.env.example` enables `STRICT_DEVICE_BINDING=true`: a license is bound to the first hardware-derived identifier, and a different device is refused with `409 DEVICE_CHANGED`. See Authentication & security §12.4 for the client checklist and the admin reset action.
 
 ### 3. Build and start
 
@@ -137,8 +104,7 @@ client checklist and the admin reset action.
 docker compose up -d --build
 ```
 
-`docker-compose.override.yml` builds the image from this checkout (instead of pulling the
-upstream image), so the code you cloned is the code that runs.
+`docker-compose.override.yml` builds the image from this checkout (instead of pulling the upstream image), so the code you cloned is the code that runs.
 
 ### 4. Open the app
 
@@ -163,8 +129,7 @@ docker compose down -v             # ⚠️ stop AND delete the database volume
 
 ### From source (optional)
 
-Use this only if you want to run the binaries directly. You need Go 1.27+, Bun/Node for the
-frontend, and PostgreSQL 18.
+Use this only if you want to run the binaries directly. You need Go 1.27+, Bun/Node for the frontend, and PostgreSQL 18.
 
 ```bash
 # 1. PostgreSQL (the compose file does not publish a host port)
@@ -187,47 +152,31 @@ Open <http://<server-ip>:9000> (migrations run automatically on startup).
 ### Troubleshooting
 
 | Symptom | Fix |
-|---|---|
+| --- | --- |
 | `Set JWT_SECRET in .env` / `LICENSE_SIGNING_KEY` | Run step 2 again; the lines must not be empty. |
 | Port 9000 already in use | Stop the other service, or change `ports` to `"9001:9000"` in `docker-compose.override.yml`. |
 | `SETUP_EMAIL_NOT_ALLOWED` | The setup email must be listed in `ADMIN_EMAILS` (or clear `ADMIN_EMAILS`). |
-| No login email | Check `docker compose logs -f keygate | grep -i otp`, or configure SMTP in `.env`. |
+| No login email | Check \`docker compose logs -f keygate |
 | Reset everything (destructive) | `docker compose down -v` then repeat step 3. |
 | Behind a reverse proxy | Set `BASE_URL=https://your.domain` in `.env` and terminate TLS at the proxy. |
 
-<br />
-
 ## What's in this fork
 
-The [`update-docs`](https://github.com/aminshojaei13/keygate/tree/update-docs)
-branch adds, on top of upstream:
+The `update-docs`branch adds, on top of upstream:
 
-- **Strict device binding** (default): one active device per license, exact
-  hardware-derived identity (`kgid:v1` or `sha256:`), no client/portal slot release, and
-  no `previous_identifier` migration. Activation with a changed identifier is refused
-  with `409 DEVICE_CHANGED` (verification returns `404`); an admin can move the license
-  with `POST /admin/licenses/:id/reset-device-binding`.
-- **Device identity protocol** (`kgid:v1`) with scheme detection. Weighted drift scoring is
-  defined and tested in `pkg/deviceid` but not wired to activate/verify; setting
-  `STRICT_DEVICE_BINDING=false` currently restores multi-device limits and migration.
-- **Activation lifecycle**: soft-delete tombstones plus admin deactivate/reactivate, license
-  transfer, and signed offline-token issuance.
-- **Offline tokens** with `ver`/`kid` and key rotation, discoverable at
-  `GET /api/v1/license/pubkey` and `GET /api/v1/releases/:product_slug/signing-key`.
-- **Signed integrity manifests** (`keygate-integrity-v1`) with `cmd/keygate-manifest`
-  (`create` / `verify` / `inspect`).
-- **Admin UI**: Devices page, Integration page, offline-token inspector, and expanded license
-  actions.
-- **Client samples**: C# for .NET 8 and .NET Core 3.1, a dependency-free Python SDK, and
-  Python/TypeScript examples.
+- **Strict device binding** (default): one active device per license, exact hardware-derived identity (`kgid:v1` or `sha256:`), no client/portal slot release, and no `previous_identifier` migration. Activation with a changed identifier is refused with `409 DEVICE_CHANGED` (verification returns `404`); an admin can move the license with `POST /admin/licenses/:id/reset-device-binding`.
+- **Device identity protocol** (`kgid:v1`) with scheme detection. Weighted drift scoring is defined and tested in `pkg/deviceid` but not wired to activate/verify; setting `STRICT_DEVICE_BINDING=false` currently restores multi-device limits and migration.
+- **Activation lifecycle**: soft-delete tombstones plus admin deactivate/reactivate, license transfer, and signed offline-token issuance.
+- **Offline tokens** with `ver`/`kid` and key rotation, discoverable at `GET /api/v1/license/pubkey` and `GET /api/v1/releases/:product_slug/signing-key`.
+- **Signed integrity manifests** (`keygate-integrity-v1`) with `cmd/keygate-manifest`(`create` / `verify` / `inspect`).
+- **Admin UI**: Devices page, Integration page, offline-token inspector, and expanded license actions.
+- **Client samples**: C# for .NET 8 and .NET Core 3.1, a dependency-free Python SDK, and Python/TypeScript examples.
 - **Documentation**: a 13-file Persian team guide plus protocol specifications.
-
-<br />
 
 ## Documentation
 
 | Guide | What it covers |
-|---|---|
+| --- | --- |
 | [**Persian team guide**](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/team-guide/README.md) | Setup, architecture, security, deployment, troubleshooting (فارسی) |
 | [API reference](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/team-guide/api-reference.md) | Every registered endpoint, including strict-binding errors and admin reset |
 | [C# / .NET integration](https://github.com/aminshojaei13/keygate/blob/update-docs/docs/team-guide/csharp-dotnet-integration.md) | Activation, verification, offline tokens, samples |
@@ -239,15 +188,12 @@ branch adds, on top of upstream:
 | [Deployment & configuration](https://github.com/aminshojaei13/keygate/tree/update-docs/docs) | Production install, backups, key management |
 | [keygate.app/docs](https://keygate.app/docs) | Upstream public documentation |
 
-> All `docs/team-guide/*` links point at the `update-docs` branch. Once that branch is
-> merged into `main`, they can be relative paths again.
-
-<br />
+> All `docs/team-guide/*` links point at the `update-docs` branch. Once that branch is merged into `main`, they can be relative paths again.
 
 ## Compared to Alternatives
 
-| | **Keygate** | Keygen | Cryptlex | LicenseSpring |
-|:---|:---:|:---:|:---:|:---:|
+|  | **Keygate** | Keygen | Cryptlex | LicenseSpring |
+| --- | --- | --- | --- | --- |
 | Open source | **✅ AGPL v3** | Partial | ❌ | ❌ |
 | Self-hosted | **✅** | ✅ | ❌ | ❌ |
 | Price | **Free** | From $99/mo | From $249/mo | From $50/mo |
@@ -262,23 +208,18 @@ branch adds, on top of upstream:
 | Idempotency-Key | **✅** | ❌ | ❌ | ❌ |
 | i18n | ✅ | ❌ | ❌ | ❌ |
 
-<br />
-
 ## Community
 
-- **[Discussions](https://github.com/tabloy/keygate/discussions)** — Questions, ideas, show & tell
-- **[Issues](https://github.com/tabloy/keygate/issues)** — Bug reports and feature requests
-- **[Blog](https://keygate.app/blog)** — Updates and engineering stories
-- **[Sponsor](https://keygate.app/sponsorships)** — Support the project
+- [**Discussions**](https://github.com/tabloy/keygate/discussions) — Questions, ideas, show & tell
+- [**Issues**](https://github.com/tabloy/keygate/issues) — Bug reports and feature requests
+- [**Blog**](https://keygate.app/blog) — Updates and engineering stories
+- [**Sponsor**](https://keygate.app/sponsorships) — Support the project
 
 ## Sponsors
 
-Keygate is free and self-hosted. If it saves you the cost of a hosted licensing
-service, [sponsoring on Ko-fi](https://ko-fi.com/alanisme) keeps development going.
+Keygate is free and self-hosted. If it saves you the cost of a hosted licensing service, [sponsoring on Ko-fi](https://ko-fi.com/alanisme) keeps development going.
 
-<!-- sponsors:start -->
-_Be the first._
-<!-- sponsors:end -->
+*Be the first.*
 
 ## Contributing
 
@@ -300,16 +241,6 @@ You are free to fork, modify, and self-host this software under the AGPL v3. The
 
 ## Star History
 
-<a href="https://star-history.com/#tabloy/keygate&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=tabloy/keygate&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=tabloy/keygate&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=tabloy/keygate&type=Date" width="600" />
- </picture>
-</a>
+<img src="https://api.star-history.com/svg?repos=tabloy/keygate&amp;type=Date" alt="Star History Chart" width="600" />---
 
----
-
-<div align="center">
-<sub>If Keygate helps your business, consider giving it a ⭐</sub>
-</div>
+If Keygate helps your business, consider giving it a ⭐

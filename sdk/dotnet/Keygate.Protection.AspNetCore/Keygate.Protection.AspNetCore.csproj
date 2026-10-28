@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Keygate.Protection.AspNetCore</AssemblyName>
+    <RootNamespace>Keygate.Protection.AspNetCore</RootNamespace>
+    <PackageId>Keygate.Protection.AspNetCore</PackageId>
+    <Version>0.1.0</Version>
+    <Description>ASP.NET Core middleware and attribute for Keygate license protection.</Description>
+    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../Keygate.Protection/Keygate.Protection.csproj" />
+  </ItemGroup>
+
+</Project>

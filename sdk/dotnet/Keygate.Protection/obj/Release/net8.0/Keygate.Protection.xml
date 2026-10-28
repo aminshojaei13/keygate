@@ -1,0 +1,603 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Keygate.Protection</name>
+    </assembly>
+    <members>
+        <member name="T:Keygate.Protection.Device.DeviceIdentity">
+            <summary>
+            A derived device identity. <see cref="P:Keygate.Protection.Device.DeviceIdentity.Id"/> is the value sent to the
+            server as the activation identifier.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.Device.DeviceIdentity.IsHardwareDerived">
+            <summary>
+            False only when the machine exposed no usable hardware or OS
+            component and the SDK fell back to a persisted random value.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.Device.DeviceIdentity.Components">
+            <summary>
+            Names of the components that contributed, never their raw values.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Device.DeviceIdFormats">
+            <summary>
+            Syntactic helpers for the versioned Keygate device identifier.
+            Mirrors pkg/deviceid in the Go server.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.Device.DeviceIdFormats.HashComponent(System.String,System.String)">
+            <summary>
+            Hashes one normalized hardware/OS characteristic with the same
+            domain separation the Go server uses, so digests are comparable
+            across implementations.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.Device.DeviceIdFormats.ComputeCompositeDigest(System.String,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String})">
+            <summary>
+            Computes the canonical 64-hex composite digest from component
+            hashes. Keys are sorted and lowercased; empty values are skipped.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.Device.DeviceIdFormats.NormalizeValue(System.String)">
+            <summary>
+            Trims, drops control characters and lowercases. Matches
+            deviceid.NormalizeValue in the Go server.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Device.DeviceComponentCollector">
+            <summary>
+            Collects stable, non-personal machine characteristics. Every probe is
+            optional: a missing value simply contributes no component. Raw
+            serials never leave the process — only their domain-separated hashes
+            go into the identifier.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Integrity.IntegrityVerifier">
+             <summary>
+             Verifies a Keygate signed integrity manifest and checks installed
+             files against it. The manifest format mirrors pkg/integrity on the
+             server:
+            
+             <code>
+             { "format": "keygate-integrity-v1", "manifest_version": 1,
+               "payload": base64url(canonical manifest JSON),
+               "signature": base64url(ed25519 over the payload TEXT),
+               "signing_key_id": "...", "algorithm": "ed25519" }
+             </code>
+            
+             Signature failures and file mismatches are reported as results, not
+             exceptions, so the caller can report them without a crash. IO errors
+             (permissions, locked files) go to <see cref="P:Keygate.Protection.IntegrityCheckResult.Errors"/>
+             and must not be treated as tampering.
+             </summary>
+        </member>
+        <member name="M:Keygate.Protection.Integrity.IntegrityVerifier.ValidateRelativePath(System.String)">
+            <summary>
+            Validates the relative-path rules from the Go implementation:
+            forward slashes only, no absolute paths, no empty or dot segments,
+            no control characters, and canonical form.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Internal.Ed25519">
+            <summary>
+            Thin Ed25519 wrapper over BouncyCastle's pure-managed implementation.
+            The private key is a 32-byte seed, which is what Keygate stores in the
+            local secret store; the 64-byte expanded form is derived only in memory.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.Internal.Ed25519.TryParsePublicKey(System.String,System.Byte[]@)">
+            <summary>
+            Parses a public key written as 64 hex characters, base64url or
+            standard base64, matching the server's accepted encodings.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.Internal.Ed25519.FixedTimeEquals(System.Byte[],System.Byte[])">
+            <summary>
+            Constant-time comparison for equal-length byte arrays. The BCL's
+            CryptographicOperations.FixedTimeEquals is not available on
+            netstandard2.0, which this library still targets.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Internal.Base64Url">
+            <summary>
+            base64url helpers. Keygate emits unpadded base64url (Go's
+            base64.RawURLEncoding) but accepts padded standard base64 on input in
+            a few places, so decoding is deliberately lenient.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.Internal.Base64Url.TryDecodeFlexible(System.String,System.Byte[]@)">
+            <summary>
+            Decodes the encodings accepted by the Go server: raw-url, url,
+            standard and raw-standard base64.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Internal.KeygateApi">
+            <summary>
+            Small HTTP client for the public Keygate API. It never talks to
+            /api/v1/admin and never sends a license key to a host other than the
+            configured base URL.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.KeygateException">
+            <summary>Base class for every error raised by the SDK.</summary>
+        </member>
+        <member name="T:Keygate.Protection.KeygateConfigurationException">
+            <summary>
+            The SDK was constructed or used with invalid configuration. This is a
+            programming/deployment error and should fail fast at startup.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.KeygateNetworkException">
+            <summary>
+            A network call did not complete: DNS, TCP, TLS, timeout or a proxy
+            failure. Crucially, this is NOT evidence of tampering and the SDK
+            never turns it into a security report.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.KeygateLicenseException">
+            <summary>
+            The license is not usable: signature failure, expired token, wrong
+            product, missing feature, suspended/revoked license, and so on.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.KeygateApiException">
+            <summary>
+            The server answered with a non-success envelope. <see cref="P:Keygate.Protection.KeygateApiException.Code"/> is
+            the machine-readable code the server sent, which is the value an
+            application should branch on.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.KeygateProtocolException">
+            <summary>
+            A response or manifest did not match the documented wire format.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.KeygateSecurityEventException">
+            <summary>A security report could not be built or sent.</summary>
+        </member>
+        <member name="T:Keygate.Protection.ActivationResult">
+            <summary>Result of a successful activation call.</summary>
+        </member>
+        <member name="T:Keygate.Protection.LicenseSnapshot">
+            <summary>
+            A verified license token. Every property comes from the signed
+            payload; <see cref="!:RawToken"/> is the token that was verified.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.LicenseSnapshot.IsUsableAt(System.DateTimeOffset)">
+            <summary>
+            True while the check-in token and the license term (plus grace)
+            are both still in the future.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.LicenseSnapshot.AllowsUpdatePublishedAt(System.DateTimeOffset)">
+            <summary>
+            True when the release's publication date is inside the paid
+            maintenance window. Use it to gate auto-updates; the license
+            itself may remain valid for older releases.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.LicenseValidation">
+            <summary>Outcome of an online or offline license validation.</summary>
+        </member>
+        <member name="T:Keygate.Protection.IntegrityCheckResult">
+            <summary>Result of a signed-manifest file integrity check.</summary>
+        </member>
+        <member name="P:Keygate.Protection.IntegrityCheckResult.ManifestError">
+            <summary>
+            Set when the manifest itself could not be trusted (bad signature,
+            unsupported format, unreadable file). File results are empty in
+            that case.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.SecurityReportResult">
+            <summary>Outcome of a security-event report.</summary>
+        </member>
+        <member name="T:Keygate.Protection.KeygateOptions">
+            <summary>
+            Configuration for <see cref="T:Keygate.Protection.KeygateProtection"/>.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.BaseUrl">
+            <summary>
+            Base URL of the Keygate server, for example
+            <c>https://licenses.example.com</c>. Plain HTTP is accepted only
+            for loopback hosts unless <see cref="P:Keygate.Protection.KeygateOptions.AllowInsecureHttp"/> is set.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.LicenseKey">
+            <summary>
+            The customer's license key. Optional at construction: it can be
+            supplied later through <see cref="M:Keygate.Protection.KeygateProtection.ActivateAsync(System.Threading.CancellationToken)"/>
+            or read from the local state written by a previous run.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.ProductId">
+            <summary>
+            Expected product ID. When set, a token issued for another product
+            is rejected even if its signature is valid. Strongly recommended.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.DeviceId">
+            <summary>
+            Overrides the derived device identifier. Only use this when the
+            host application already has a stable, privacy-preserving device
+            ID in the <c>kgid:v1:&lt;platform&gt;:&lt;64-hex&gt;</c> format.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.DeviceLabel">
+            <summary>
+            Human-readable label shown in the Keygate dashboard when the
+            device activates. Defaults to "C# SDK". Do not put personal data
+            (a person's name, an email address) here.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.StorageDirectory">
+            <summary>
+            Directory for the local state file (device key, cached token,
+            license key when <see cref="P:Keygate.Protection.KeygateOptions.PersistLicenseKey"/> is true).
+            Defaults to the per-user application-data directory.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.SecretStore">
+            <summary>
+            Replace the default file-backed secret store. Useful for
+            applications that already have a keychain/credential manager.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.PersistLicenseKey">
+            <summary>
+            Persist the license key locally so the app can reactivate and
+            revalidate without asking the customer again. Default true. Set
+            false when the host app supplies the key from its own storage.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.IncludeHostnameInFingerprint">
+            <summary>
+            Adds the machine hostname to the device fingerprint. Off by
+            default: a hostname is weak entropy and changes more often than
+            hardware identifiers. Hardware and OS components are used first.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.LicensePublicKey">
+            <summary>
+            Pinned Ed25519 license public key, as 64 hex characters or
+            base64url. Pinning is strongly recommended: it removes the
+            first-run key-fetch step from the trust path.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.LicensePublicKeyId">
+            <summary>
+            Key id that goes with <see cref="P:Keygate.Protection.KeygateOptions.LicensePublicKey"/>. Optional;
+            when omitted the token's <c>kid</c> is not cross-checked against a
+            pinned single key (the signature still has to verify).
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.LicensePublicKeys">
+            <summary>
+            Additional trusted license keys, keyed by <c>kid</c>. Use this
+            during a signing-key rotation: old and new keys can both verify.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.HttpTimeout">
+            <summary>HTTP timeout for every Keygate call.</summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.ClockSkew">
+            <summary>
+            Clock skew tolerated when checking <c>iat</c>, <c>exp</c> and the
+            license term. Default five minutes.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.ValidationCacheDuration">
+            <summary>
+            How long a successful online validation is reused before another
+            network call is made. Zero means "always call the server".
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.PeriodicValidationInterval">
+            <summary>
+            Optional periodic revalidation interval. Call
+            <see cref="M:Keygate.Protection.KeygateProtection.StartPeriodicValidation(System.Nullable{System.TimeSpan})"/> to arm it.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.IntegrityManifestPath">
+            <summary>Path to a signed integrity manifest envelope (JSON).</summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.IntegrityManifestUri">
+            <summary>Optional URL to fetch a signed integrity manifest from.</summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.IntegrityInstallDirectory">
+            <summary>
+            Directory the manifest paths are relative to. Defaults to the
+            application base directory.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.ReleasePublicKeys">
+            <summary>
+            Trusted release signing keys, keyed by <c>signing_key_id</c>, as
+            hex or base64. Fetch them once from
+            <c>GET /api/v1/releases/:product_slug/signing-key</c> and pin them
+            in the shipped application.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.AutoReportIntegrityFailures">
+            <summary>
+            Report file mismatches automatically when
+            <see cref="M:Keygate.Protection.KeygateProtection.CheckIntegrityAsync(System.String,System.Threading.CancellationToken)"/> finds them.
+            Signature/format failures are reported as <c>manifest_invalid</c>.
+            IO errors are never reported: a locked or unreadable file is not
+            evidence of tampering. Default true.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.SecurityReportingEnabled">
+            <summary>
+            Master switch for <see cref="M:Keygate.Protection.KeygateProtection.ReportSecurityEventAsync(Keygate.Protection.Security.SecurityEvent,System.Threading.CancellationToken)"/>.
+            Default true. Disabling it does not disable the server's policy
+            engine; it only stops this client from contributing evidence.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.RequiredFeatures">
+            <summary>
+            Features that must be present for a license to count as valid.
+            Checked after activation and after every validation.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.HttpClient">
+            <summary>Supply a configured HttpClient (proxy, handler, etc.).</summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.AllowInsecureHttp">
+            <summary>
+            Allow plain HTTP to a non-loopback host. Off by default because a
+            license key is a bearer credential on the wire.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateOptions.Log">
+            <summary>Optional diagnostic sink. Never receives secrets.</summary>
+        </member>
+        <member name="T:Keygate.Protection.KeygateAttribution">
+            <summary>
+            AGPL v3 Section 7(b) attribution values. The "Powered by Keygate"
+            notice is a license requirement, not a removable feature: keep it in
+            your about box, footer, login page and any customer-facing surface.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.KeygateProtection">
+             <summary>
+             One object that hides the Keygate protocol from the host application:
+             device identity, activation, signed offline validation, file integrity
+             and tamper reporting.
+            
+             Typical console/desktop flow:
+             <code>
+             using var protection = new KeygateProtection(new KeygateOptions { BaseUrl = ... });
+             await protection.InitializeAsync();
+             if (protection.CurrentLicense == null)
+                 await protection.ActivateAsync();          // first run only
+             var check = await protection.ValidateLicenseAsync();
+             if (!check.IsValid) return 1;
+             var integrity = await protection.CheckIntegrityAsync();
+             if (!integrity.IsValid) return 2;
+             if (!protection.HasFeature("pro")) { ... }
+             </code>
+            
+             This class is thread-safe for normal use. It never treats a network
+             failure as tampering, never stores the license key in a report, and
+             never sends the device private key anywhere.
+             </summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateProtection.DeviceId">
+            <summary>The canonical device identifier sent to the server.</summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateProtection.Device">
+            <summary>Device identity metadata (never raw hardware values).</summary>
+        </member>
+        <member name="P:Keygate.Protection.KeygateProtection.CurrentLicense">
+            <summary>
+            The last verified license snapshot, or null before activation /
+            before a cached token has been verified. Read-only; call
+            <see cref="M:Keygate.Protection.KeygateProtection.ValidateLicenseAsync(System.Boolean,System.Threading.CancellationToken)"/> to refresh it.
+            </summary>
+        </member>
+        <member name="E:Keygate.Protection.KeygateProtection.PeriodicValidationCompleted">
+            <summary>Raised after each periodic validation.</summary>
+        </member>
+        <member name="M:Keygate.Protection.KeygateProtection.InitializeAsync(System.Threading.CancellationToken)">
+            <summary>
+            Loads local state, derives the device ID and prepares the device's
+            report-signing key. This is local-only: it does not require the
+            network and does not fail when the app is not activated yet.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.KeygateProtection.ActivateAsync(System.Threading.CancellationToken)">
+            <summary>
+            Activates this device for the configured license key. Safe to call
+            on every start: the server answers "already_activated" for the same
+            device without consuming a second seat. A new activation registers
+            the device's Ed25519 public key; the private half stays local.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.KeygateProtection.ValidateLicenseAsync(System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            Validates the license online, falling back to the cached signed
+            token when the network is unavailable. A network failure is never
+            reported as tampering and never invalidates a still-usable cache.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.KeygateProtection.HasFeature(System.String)">
+            <summary>
+            True when the last verified license grants <paramref name="feature"/>.
+            Feature values follow the server's entitlement rules: present,
+            non-null and not explicitly false/zero/empty.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.KeygateProtection.IsUpdateAllowed(System.DateTimeOffset)">
+            <summary>True when the license permits installing a release published at this instant.</summary>
+        </member>
+        <member name="M:Keygate.Protection.KeygateProtection.CheckIntegrityAsync(System.String,System.Threading.CancellationToken)">
+             <summary>
+             Verifies the installed files against the signed manifest configured
+             in <see cref="P:Keygate.Protection.KeygateOptions.IntegrityManifestPath"/> or
+             <see cref="P:Keygate.Protection.KeygateOptions.IntegrityManifestUri"/>.
+            
+             A bad signature or modified file is returned as an invalid result,
+             not an exception, so the app can keep running while it reports.
+             Permission/locking errors are reported separately and are never
+             treated as tampering.
+             </summary>
+        </member>
+        <member name="M:Keygate.Protection.KeygateProtection.ReportSecurityEventAsync(Keygate.Protection.Security.SecurityEvent,System.Threading.CancellationToken)">
+            <summary>
+            Reports a tamper signal. The report is signed with the device key
+            registered at activation and carries no secret. The server response
+            says whether the report was accepted, whether it was a duplicate,
+            and whether a policy now refuses the current operation.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.KeygateProtection.DeactivateAsync(System.Threading.CancellationToken)">
+            <summary>
+            Releases this device's activation slot and clears the locally
+            cached token. The device key is kept so a later re-activation
+            reuses the same identity instead of looking like a new machine.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.KeygateProtection.StartPeriodicValidation(System.Nullable{System.TimeSpan})">
+            <summary>
+            Starts background revalidation. The first check runs after one
+            interval. Call <see cref="M:Keygate.Protection.KeygateProtection.StopPeriodicValidation"/> (or dispose) to
+            stop it. Network failures fall back to the cached token exactly
+            like <see cref="M:Keygate.Protection.KeygateProtection.ValidateLicenseAsync(System.Boolean,System.Threading.CancellationToken)"/>.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.KeygateProtection.StopPeriodicValidation">
+            <summary>Stops the background timer started by <see cref="M:Keygate.Protection.KeygateProtection.StartPeriodicValidation(System.Nullable{System.TimeSpan})"/>.</summary>
+        </member>
+        <member name="T:Keygate.Protection.Licensing.LicenseTokenVerifier">
+             <summary>
+             Verifies the server's offline token:
+             <c>base64url(payload_json) "." base64url(signature)</c>.
+            
+             The Ed25519 signature covers the ASCII bytes of the base64url payload
+             half, not the decoded JSON. That lets a client verify without
+             re-serializing the payload, which would be a canonical-JSON problem.
+             </summary>
+        </member>
+        <member name="M:Keygate.Protection.Licensing.LicenseTokenVerifier.Fingerprint(System.String,System.String)">
+            <summary>
+            SHA256(identifier + ":" + product_id) truncated to eight bytes,
+            hex encoded. Same binding value the server puts in <c>fpr</c>.
+            </summary>
+        </member>
+        <member name="M:Keygate.Protection.Licensing.LicenseTokenVerifier.FeatureIsEnabled(System.Object)">
+            <summary>
+            Feature truthiness matches the server's entitlement check: a
+            present, non-null, non-false value grants the feature. Numbers
+            other than zero, non-empty strings and objects grant it too.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Security.SecurityEventTypes">
+            <summary>
+            Accepted security-event types. The list is closed server-side too, so
+            a typo is rejected instead of silently logging nothing.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Security.SecurityEvent">
+            <summary>
+            A tamper/security signal to report. The SDK fills in the event id,
+            timestamp and device signature; the caller supplies the type, a
+            severity hint and small, non-secret details.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.Security.SecurityEvent.EventId">
+            <summary>
+            Optional client-generated id. Must be 1-128 characters from
+            [A-Za-z0-9._-]. When omitted, a GUID is generated. Reusing an id
+            makes the report idempotent: the server ignores the duplicate.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.Security.SecurityEvent.Type">
+            <summary>One of <see cref="T:Keygate.Protection.Security.SecurityEventTypes"/>.</summary>
+        </member>
+        <member name="P:Keygate.Protection.Security.SecurityEvent.Severity">
+            <summary>low, medium, high or critical. Unknown values become medium.</summary>
+        </member>
+        <member name="P:Keygate.Protection.Security.SecurityEvent.OccurredAt">
+            <summary>
+            When the event happened. Defaults to now. The server accepts at
+            most ten minutes in the future and seven days in the past.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.Security.SecurityEvent.Details">
+            <summary>
+            Small telemetry map. Keys are lowercased and must match
+            <c>[a-z][a-z0-9_.-]{0,63}</c>; values are capped at 512 bytes.
+            Token-like keys are dropped, never sent.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Security.SecurityEventSigner">
+             <summary>
+             Builds and signs the canonical security-event payload shared with the
+             Go server (pkg/securityevent). The signed string is:
+            
+             <code>
+             keygate-security-event-v1\n
+             &lt;event_id&gt;\n
+             &lt;license_id&gt;\n
+             &lt;device_id&gt;\n
+             &lt;event_type&gt;\n
+             &lt;occurred_at_unix_seconds&gt;
+             </code>
+            
+             The license key, token and details are deliberately excluded: the
+             first two are secrets that must not be fed to a signing routine, and
+             details are telemetry that cannot justify a policy action alone.
+             </summary>
+        </member>
+        <member name="M:Keygate.Protection.Security.SecurityEventSigner.SanitizeDetails(System.Collections.Generic.IDictionary{System.String,System.String})">
+            <summary>
+            Copies caller details into a bounded flat map. Nothing throws: a
+            malformed extra field costs that field, not the report. Reserved
+            key names are dropped so a token cannot be smuggled into the
+            database or the audit trail by accident.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Storage.IKeygateSecretStore">
+            <summary>
+            Pluggable persistence for the SDK's small secret state: the device's
+            Ed25519 seed, the license key (when persisted) and the cached signed
+            token. Implement this to keep the material in an OS keychain, a
+            credential manager, or your own encrypted store.
+            </summary>
+        </member>
+        <member name="T:Keygate.Protection.Storage.FileSecretStore">
+             <summary>
+             Default file-backed store.
+            
+             On Windows the blob is encrypted with DPAPI for the current user, so
+             another account on the same machine cannot read it. On macOS and Linux
+             there is no equivalent dependency-free per-user secret service, so the
+             file is written with mode 0600 and permissions 0700 on its directory.
+             That protects against other users and casual inspection, not against
+             an attacker who already runs code as this user. Supply your own
+             <see cref="T:Keygate.Protection.Storage.IKeygateSecretStore"/> for stronger isolation.
+             </summary>
+        </member>
+        <member name="T:Keygate.Protection.Storage.ProtectionState">
+            <summary>
+            Local client state. Everything in here is either a secret or a value
+            derived from one, so it is written through <see cref="T:Keygate.Protection.Storage.IKeygateSecretStore"/>
+            and never logged.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.Storage.ProtectionState.FallbackDigest">
+            <summary>
+            64-hex fallback digest for machines with no readable hardware
+            identifiers. Set only when the device ID is not hardware-derived.
+            </summary>
+        </member>
+        <member name="P:Keygate.Protection.Storage.ProtectionState.DeviceSeed">
+            <summary>base64url Ed25519 seed. Never leaves this machine.</summary>
+        </member>
+    </members>
+</doc>

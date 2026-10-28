@@ -118,11 +118,17 @@ type ActivateInput struct {
 	// integrations may pass the product ID for explicit verification.
 	ProductID          string
 	PreviousIdentifier string // optional: for seamless migration from an older identifier scheme
+	// DevicePublicKey is an optional Ed25519 public key (base64) the
+	// client generated locally. When supplied, the server binds it to
+	// the activation and requires it to sign security-event reports.
+	DevicePublicKey string
+	DeviceKeyAlg    string
 }
 
 type ActivateResult struct {
 	Status    string         `json:"status"` // "activated" | "already_activated"
 	LicenseID string         `json:"license_id"`
+	ProductID string         `json:"product_id"`
 	Token     string         `json:"token"`
 	Meta      map[string]any `json:"meta"`
 }
@@ -175,16 +181,34 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 
 	if existing, err := s.store.FindActivation(ctx, lic.ID, in.Identifier); err == nil {
 		_ = s.store.TouchActivation(ctx, existing.ID)
+		if err := s.bindDeviceKey(ctx, lic, existing, in); err != nil {
+			return nil, err
+		}
 		middleware.LicenseActivations.WithLabelValues(lic.ProductID, "already_activated").Inc()
 		token, _, err := s.signToken(ctx, lic, in.Identifier)
 		if err != nil {
 			return nil, apperr.Internal(err)
 		}
 		return &ActivateResult{
-			Status: "already_activated", LicenseID: lic.ID,
+			Status: "already_activated", LicenseID: lic.ID, ProductID: lic.ProductID,
 			Token: token,
 			Meta:  responseMeta(),
 		}, nil
+	}
+
+	// A security policy can refuse new activations without touching
+	// devices that already run. The same-device path above returned
+	// first, so an existing install keeps refreshing its token.
+	if lic.ActivationBlocked {
+		s.store.Audit(ctx, &model.AuditLog{
+			Entity: "license", EntityID: lic.ID, Action: "activation_blocked",
+			ActorType: "sdk", IPAddress: in.IPAddress,
+			Changes: map[string]any{"identifier": in.Identifier, "reason": "security_policy"},
+		})
+		return nil, apperr.WithDetails(
+			apperr.New(403, "ACTIVATION_BLOCKED", "new activations are blocked for this license"),
+			map[string]any{"action": "contact_support"},
+		)
 	}
 
 	// Strict binding: a license is tied to the first device that
@@ -257,6 +281,7 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 			return &ActivateResult{
 				Status:    "activated",
 				LicenseID: lic.ID,
+				ProductID: lic.ProductID,
 				Token:     token,
 				Meta:      responseMeta(),
 			}, nil
@@ -272,13 +297,15 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 		max = 1
 	}
 	act := &model.Activation{
-		LicenseID:      lic.ID,
-		Identifier:     in.Identifier,
-		IdentifierType: in.IdentifierType,
-		Scheme:         model.DetectIdentifierScheme(in.Identifier),
-		Status:         model.ActivationActive,
-		Label:          in.Label,
-		IPAddress:      in.IPAddress,
+		LicenseID:       lic.ID,
+		Identifier:      in.Identifier,
+		IdentifierType:  in.IdentifierType,
+		Scheme:          model.DetectIdentifierScheme(in.Identifier),
+		Status:          model.ActivationActive,
+		Label:           in.Label,
+		IPAddress:       in.IPAddress,
+		DevicePublicKey: in.DevicePublicKey,
+		DeviceKeyAlg:    in.DeviceKeyAlg,
 	}
 	if err := s.store.ActivateWithinLimit(ctx, act, max); err != nil {
 		// The machine already held a slot. The read above missed it
@@ -293,7 +320,7 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 				return nil, apperr.Internal(terr)
 			}
 			return &ActivateResult{
-				Status: "already_activated", LicenseID: lic.ID,
+				Status: "already_activated", LicenseID: lic.ID, ProductID: lic.ProductID,
 				Token: token,
 				Meta:  responseMeta(),
 			}, nil
@@ -353,10 +380,52 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 	}
 
 	return &ActivateResult{
-		Status: "activated", LicenseID: lic.ID,
+		Status: "activated", LicenseID: lic.ID, ProductID: lic.ProductID,
 		Token: token,
 		Meta:  responseMeta(),
 	}, nil
+}
+
+// bindDeviceKey attaches the SDK's report-signing public key to an
+// existing activation.
+//
+//   - No stored key + a key supplied: legacy activation upgrading to
+//     signed reports. Record it.
+//   - Stored key + no key supplied: the client lost its state (or is
+//     an older SDK). Leave the binding alone; the next signed report
+//     will prove possession.
+//   - Two different keys for the same device slot: refuse. Accepting
+//     a swap would let anyone holding the license key replace the key
+//     and then file evidence in the device's name.
+func (s *LicenseService) bindDeviceKey(ctx context.Context, lic *model.License, act *model.Activation, in ActivateInput) error {
+	if in.DevicePublicKey == "" {
+		return nil
+	}
+	if act.DevicePublicKey == "" {
+		if err := s.store.UpdateActivationDeviceKey(ctx, act.ID, in.DevicePublicKey, in.DeviceKeyAlg); err != nil {
+			return apperr.Internal(err)
+		}
+		act.DevicePublicKey = in.DevicePublicKey
+		act.DeviceKeyAlg = in.DeviceKeyAlg
+		s.store.Audit(ctx, &model.AuditLog{
+			Entity: "license", EntityID: lic.ID, Action: "device_key_registered",
+			ActorType: "sdk", IPAddress: in.IPAddress,
+			Changes: map[string]any{"identifier": in.Identifier, "algorithm": in.DeviceKeyAlg},
+		})
+		return nil
+	}
+	if act.DevicePublicKey != in.DevicePublicKey {
+		s.store.Audit(ctx, &model.AuditLog{
+			Entity: "license", EntityID: lic.ID, Action: "device_key_mismatch",
+			ActorType: "sdk", IPAddress: in.IPAddress,
+			Changes: map[string]any{"identifier": in.Identifier},
+		})
+		return apperr.WithDetails(
+			apperr.Conflict("DEVICE_KEY_MISMATCH", "a different report-signing key is already bound to this device"),
+			map[string]any{"action": "contact_support"},
+		)
+	}
+	return nil
 }
 
 // recordFailure files a failed attempt and reports the lockout when
@@ -399,6 +468,7 @@ type VerifyInput struct {
 
 type VerifyResult struct {
 	Status     string     `json:"status"`
+	ProductID  string     `json:"product_id"`
 	PlanID     string     `json:"plan_id"`
 	PlanName   string     `json:"plan_name"`
 	ValidUntil *time.Time `json:"valid_until,omitempty"`
@@ -490,6 +560,7 @@ func (s *LicenseService) Verify(ctx context.Context, in VerifyInput) (*VerifyRes
 
 	return &VerifyResult{
 		Status:              lic.Status,
+		ProductID:           lic.ProductID,
 		PlanID:              lic.PlanID,
 		PlanName:            planName,
 		ValidUntil:          lic.ValidUntil,
@@ -692,6 +763,12 @@ func (s *LicenseService) assertUsable(lic *model.License) error {
 		}
 		return apperr.New(403, "LICENSE_CANCELED", "license has been canceled")
 	case model.StatusSuspended:
+		// A timed security suspension lifts itself when it expires.
+		// The row still says suspended so the dashboard can show why
+		// it happened; only the usability decision changes.
+		if lic.SuspendedUntil != nil && now.After(*lic.SuspendedUntil) {
+			return nil
+		}
 		return apperr.New(403, "LICENSE_SUSPENDED", "license has been suspended")
 	case model.StatusRevoked:
 		return apperr.New(403, "LICENSE_REVOKED", "license has been revoked")

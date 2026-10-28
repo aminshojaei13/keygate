@@ -328,3 +328,35 @@ docker run --rm -v "$PWD:/app" -w /app \
 * `System.Text.Json` در 3.1 داخل shared framework هست؛ نیازی به پکیج نیست.
 * **هشدار:** .NET Core 3.1 از دسامبر ۲۰۲۲ EOL است و وصلهٔ امنیتی نمی‌گیرد. اگر امکان دارد
   پروژه را به net8.0 ارتقا دهید؛ این نمونه فقط برای دورهٔ گذار است.
+
+---
+
+## ۱۴. آزمایشگاه تکرارپذیر: `Keygate.Lab`
+
+`examples/dotnet/Keygate.Sample/` یک نمونهٔ مرجع برای اتصال به سرور واقعی است. اگر می‌خواهید
+**رفتار لایسنس** را بدون سرور و دیتابیس تست کنید، از `examples/dotnet/Keygate.Lab/` استفاده کنید.
+این پروژه یک mock درون‌فرآیندی از `/api/v1/license/*` دارد، توکن‌ها را با همان قالب
+`internal/license/token.go` امضا می‌کند و شناسهٔ دستگاه را با همان الگوریتم `pkg/deviceid`
+می‌سازد (`kgid:v1:<platform>:<64hex>`).
+
+```bash
+cd examples/dotnet/Keygate.Lab
+dotnet run -- demo          # ۳۶ بررسی خودکار
+```
+
+سناریوهای پوشش‌داده‌شده:
+
+| سناریو | دستور | نتیجهٔ مورد انتظار |
+|---|---|---|
+| strict: دستگاه دوم | `activate --name b` | `409 DEVICE_CHANGED` |
+| strict: شناسهٔ UUID | `install --name c --scheme uuid` سپس `activate --name c` | `400 IDENTIFIER_SCHEME_UNSUPPORTED` |
+| strict: تغییر دستگاه | `machine-change` سپس `activate` / `deactivate` | `DEVICE_CHANGED` / `DEACTIVATION_DISABLED` |
+| strict: آزادسازی ادمین | `server reset-binding` سپس `activate` | موفق |
+| tolerant: سقف صندلی | `server reset --device-binding tolerant` سپس `activate --name b` | `409 ACTIVATION_LIMIT` |
+| tolerant: مهاجرت | `activate --previous-identifier <old>` | موفق (بدون مصرف صندلی) |
+| تغییر فایل برنامه | `tamper --target app` سپس `start --offline` | `APP_FILES_CHANGED` |
+| دست‌کاری توکن | `tamper --target token` سپس `start --offline` | `TOKEN_SIGNATURE_INVALID` |
+| پایان مدت لایسنس | `server reset --valid-in-days -1` سپس `start --offline` | `LICENSE_TERM_ENDED` |
+
+جزئیات کامل، ساختار `device.json`/`install.json`/`license.json` و محدودیت‌ها در
+[`examples/dotnet/Keygate.Lab/README.md`](../../examples/dotnet/Keygate.Lab/README.md) آمده است.

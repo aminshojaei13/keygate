@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="../buildMultiTargeting/Keygate.Sample.AspNetCore.props" />
+</Project>

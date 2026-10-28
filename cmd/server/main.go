@@ -282,6 +282,7 @@ func main() {
 		os.Exit(1)
 	}
 	licenseSvc := service.NewLicenseService(db, licenseSigningPriv, logger, bf, webhookSvc, cfg.StrictDeviceBinding)
+	securitySvc := service.NewSecurityService(db, logger, webhookSvc)
 	usageSvc := service.NewUsageService(db, webhookSvc, emailSvc, logger, cfg.QuotaWarningThreshold)
 	seatSvc := service.NewSeatService(db, webhookSvc, emailSvc, logger, cfg.BaseURL)
 	entitlementSvc := service.NewEntitlementService(db, logger)
@@ -412,6 +413,7 @@ func main() {
 	})
 
 	licenseH := handler.NewLicenseHandler(licenseSvc)
+	securityH := handler.NewSecurityHandler(securitySvc, db)
 	authH := &handler.AuthHandler{Store: db, Config: cfg, Email: emailSvc}
 	stripeH := &payment.StripeHandler{
 		Store:         db,
@@ -784,6 +786,12 @@ func main() {
 		// Read / pure-status endpoints — no idempotency layer needed.
 		lic.POST("/verify", licenseH.Verify)
 		lic.POST("/deactivate", licenseH.Deactivate)
+		// Tamper reports. The tighter scoped limiter is deliberate:
+		// legitimate SDKs send one per finding, while a hostile client
+		// can otherwise turn this endpoint into a write amplifier.
+		lic.POST("/security-events",
+			middleware.RateLimitByIPScoped("security_events", 60, time.Minute),
+			securityH.Report)
 		lic.POST("/entitlements", entitlementH.Check)
 		lic.POST("/usage/status", usageH.GetQuotaStatus)
 		lic.POST("/floating/checkin", floatingH.CheckIn)
@@ -1221,6 +1229,9 @@ func main() {
 		// hardware/OS change. Without it a strict license can never
 		// move to new hardware.
 		licWrite.POST("/licenses/:id/reset-device-binding", adminH.ResetDeviceBinding)
+		// Clears the reversible security markers (review flag,
+		// activation block). Suspension is lifted by /reinstate.
+		licWrite.POST("/licenses/:id/security-reset", securityH.ResetSecurityState)
 
 		licWrite.POST("/activations/:id/deactivate", adminH.DeactivateActivation)
 		licWrite.POST("/activations/:id/reactivate", adminH.ReactivateActivation)
@@ -1269,6 +1280,13 @@ func main() {
 		admin.GET("/audit-logs", adminH.ListAuditLogs)
 		admin.GET("/users", adminH.ListUsers)
 		admin.GET("/users/:id", adminH.GetUserDetail)
+
+		// ─── Security events and reaction policies ───
+		admin.GET("/products/:id/security-policy", securityH.GetPolicy)
+		admin.PUT("/products/:id/security-policy", securityH.UpdatePolicy)
+		admin.GET("/security-events", securityH.ListEvents)
+		admin.POST("/security-events/:id/action", securityH.ActOnEvent)
+		admin.POST("/security-events/:id/dismiss", securityH.DismissEvent)
 
 		// ─── Releases (industry-standard bundle model) ───
 		// Resource: release with multiple platform artifacts (mirrors

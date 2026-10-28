@@ -1,0 +1,255 @@
+{
+  "format": 1,
+  "restore": {
+    "/Users/aminshojaei/AndroidStudioProjects/keygate/examples/dotnet/Keygate.Sample.AspNetCore/Keygate.Sample.AspNetCore.csproj": {}
+  },
+  "projects": {
+    "/Users/aminshojaei/AndroidStudioProjects/keygate/examples/dotnet/Keygate.Sample.AspNetCore/Keygate.Sample.AspNetCore.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/aminshojaei/AndroidStudioProjects/keygate/examples/dotnet/Keygate.Sample.AspNetCore/Keygate.Sample.AspNetCore.csproj",
+        "projectName": "Keygate.Sample.AspNetCore",
+        "projectPath": "/Users/aminshojaei/AndroidStudioProjects/keygate/examples/dotnet/Keygate.Sample.AspNetCore/Keygate.Sample.AspNetCore.csproj",
+        "packagesPath": "/Users/aminshojaei/.nuget/packages/",
+        "outputPath": "/Users/aminshojaei/AndroidStudioProjects/keygate/examples/dotnet/Keygate.Sample.AspNetCore/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/aminshojaei/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/Keygate.Protection.AspNetCore.csproj": {
+                "projectPath": "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/Keygate.Protection.AspNetCore.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.AspNetCore.App": {
+              "privateAssets": "none"
+            },
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/Users/aminshojaei/.dotnet/sdk/8.0.427/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/Keygate.Protection.AspNetCore.csproj": {
+      "version": "0.1.0",
+      "restore": {
+        "projectUniqueName": "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/Keygate.Protection.AspNetCore.csproj",
+        "projectName": "Keygate.Protection.AspNetCore",
+        "projectPath": "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/Keygate.Protection.AspNetCore.csproj",
+        "packagesPath": "/Users/aminshojaei/.nuget/packages/",
+        "outputPath": "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/aminshojaei/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/Keygate.Protection.csproj": {
+                "projectPath": "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/Keygate.Protection.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.AspNetCore.App": {
+              "privateAssets": "none"
+            },
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/Users/aminshojaei/.dotnet/sdk/8.0.427/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/Keygate.Protection.csproj": {
+      "version": "0.1.0",
+      "restore": {
+        "projectUniqueName": "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/Keygate.Protection.csproj",
+        "projectName": "Keygate.Protection",
+        "projectPath": "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/Keygate.Protection.csproj",
+        "packagesPath": "/Users/aminshojaei/.nuget/packages/",
+        "outputPath": "/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/obj/",
+        "projectStyle": "PackageReference",
+        "crossTargeting": true,
+        "configFilePaths": [
+          "/Users/aminshojaei/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0",
+          "netstandard2.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          },
+          "netstandard2.0": {
+            "targetAlias": "netstandard2.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "BouncyCastle.Cryptography": {
+              "target": "Package",
+              "version": "[2.4.0, )"
+            },
+            "Microsoft.Win32.Registry": {
+              "target": "Package",
+              "version": "[5.0.0, )"
+            },
+            "System.Security.Cryptography.ProtectedData": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/Users/aminshojaei/.dotnet/sdk/8.0.427/PortableRuntimeIdentifierGraph.json"
+        },
+        "netstandard2.0": {
+          "targetAlias": "netstandard2.0",
+          "dependencies": {
+            "BouncyCastle.Cryptography": {
+              "target": "Package",
+              "version": "[2.4.0, )"
+            },
+            "Microsoft.Win32.Registry": {
+              "target": "Package",
+              "version": "[5.0.0, )"
+            },
+            "NETStandard.Library": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[2.0.3, )",
+              "autoReferenced": true
+            },
+            "System.Security.Cryptography.ProtectedData": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
+            "System.Text.Json": {
+              "target": "Package",
+              "version": "[8.0.5, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "runtimeIdentifierGraphPath": "/Users/aminshojaei/.dotnet/sdk/8.0.427/RuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

@@ -493,7 +493,8 @@ func (s *Store) ReinstateLicense(ctx context.Context, id string) (string, error)
 	err := RunInTx(ctx, s.DB, func(ctx context.Context, tx bun.Tx) error {
 		err := tx.NewRaw(`
 			UPDATE licenses SET status = `+usableStatusSQL+`,
-				suspended_at = NULL, suspended_by = NULL, canceled_at = NULL, updated_at = now()
+				suspended_at = NULL, suspended_by = NULL, suspended_until = NULL,
+				canceled_at = NULL, updated_at = now()
 			WHERE id = ? AND (status = 'suspended' OR
 				(status IN ('expired', 'canceled') AND (valid_until IS NULL OR valid_until > now())))
 			RETURNING status`, id).Scan(ctx, &status)

@@ -9,6 +9,7 @@ import (
 	"github.com/tabloy/keygate/internal/service"
 	"github.com/tabloy/keygate/pkg/apperr"
 	"github.com/tabloy/keygate/pkg/response"
+	"github.com/tabloy/keygate/pkg/securityevent"
 )
 
 const maxIdentifierLen = 256
@@ -28,6 +29,11 @@ func (h *LicenseHandler) Activate(c *gin.Context) {
 		IdentifierType     string `json:"identifier_type"`
 		Label              string `json:"label"`
 		PreviousIdentifier string `json:"previous_identifier"`
+		// DevicePublicKey is optional. SDKs that support signed
+		// security reports send the base64url Ed25519 public key
+		// generated on this device; the private half stays local.
+		DevicePublicKey string `json:"device_public_key"`
+		DeviceKeyAlg    string `json:"device_key_alg"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "license_key and identifier are required")
@@ -51,6 +57,24 @@ func (h *LicenseHandler) Activate(c *gin.Context) {
 		response.BadRequest(c, "label too long")
 		return
 	}
+	if len(req.DevicePublicKey) > securityevent.MaxPublicKeyLength {
+		response.BadRequest(c, "device_public_key is too long")
+		return
+	}
+	if req.DevicePublicKey != "" {
+		pub, err := securityevent.DecodePublicKey(req.DevicePublicKey)
+		if err != nil || len(pub) != 32 {
+			response.BadRequest(c, "device_public_key must be a 32-byte Ed25519 public key")
+			return
+		}
+		if req.DeviceKeyAlg == "" {
+			req.DeviceKeyAlg = "ed25519"
+		}
+		if req.DeviceKeyAlg != "ed25519" {
+			response.BadRequest(c, "device_key_alg must be ed25519")
+			return
+		}
+	}
 
 	productID, _ := c.Get("product_id")
 	result, err := h.svc.Activate(c.Request.Context(), service.ActivateInput{
@@ -61,6 +85,8 @@ func (h *LicenseHandler) Activate(c *gin.Context) {
 		IPAddress:          c.ClientIP(),
 		ProductID:          str(productID),
 		PreviousIdentifier: req.PreviousIdentifier,
+		DevicePublicKey:    req.DevicePublicKey,
+		DeviceKeyAlg:       req.DeviceKeyAlg,
 	})
 	if err != nil {
 		writeAppErr(c, err)

@@ -1,0 +1,5 @@
+is_global = true
+build_property.RootNamespace = Keygate.Protection
+build_property.ProjectDir = /Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 
