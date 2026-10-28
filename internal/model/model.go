@@ -355,13 +355,29 @@ type License struct {
 	// operator lifts, or SuspendedByStripe (a paused subscription), which
 	// Stripe lifts by resuming it. Empty when not suspended.
 	SuspendedBy string `bun:",nullzero" json:"suspended_by,omitempty"`
+	// SuspendedUntil arms a time-boxed security suspension. Nil on an
+	// administrator-issued suspension (it lasts until reinstated). A
+	// licence whose suspension has expired is treated as usable by
+	// assertUsable even if the row still says suspended, so a timed
+	// policy does not need a background job to lift it.
+	SuspendedUntil *time.Time `json:"suspended_until,omitempty"`
 	// PastDueAt anchors the dunning-email ladder. Set by the
 	// payment-failed handler when the license first enters past_due;
 	// cleared on recovery / cancellation. Reading lic.UpdatedAt as
 	// a clock here is wrong — that column bumps on unrelated writes.
 	PastDueAt *time.Time `json:"past_due_at,omitempty"`
 	Notes     string     `json:"notes,omitempty"`
-	OrgName   string     `json:"org_name,omitempty"`
+	// UnderReview is a reversible "look at this licence" marker set by
+	// a security policy. It never blocks the licence by itself: an
+	// unverified client report must not break a paying install.
+	UnderReview       bool       `bun:",notnull,default:false" json:"under_review"`
+	UnderReviewAt     *time.Time `json:"under_review_at,omitempty"`
+	UnderReviewReason string     `bun:",notnull,default:''" json:"under_review_reason,omitempty"`
+	// ActivationBlocked refuses NEW device activations while leaving
+	// existing installs working. It is the proportionate answer to a
+	// suspected activation-policy abuse.
+	ActivationBlocked bool   `bun:",notnull,default:false" json:"activation_blocked"`
+	OrgName           string `json:"org_name,omitempty"`
 
 	// External identifiers — opaque strings owned by the merchant.
 	// Used to map Keygate licenses to the merchant's own user/tenant
@@ -408,6 +424,11 @@ const (
 const (
 	SuspendedByAdmin  = "admin"
 	SuspendedByStripe = "stripe"
+	// SuspendedBySecurityPolicy is written by the automatic reaction to
+	// a verified security event. Kept distinct so the dashboard can
+	// explain why the licence stopped and an operator knows a policy,
+	// not a person or Stripe, made the call.
+	SuspendedBySecurityPolicy = "security_policy"
 )
 
 // ─── Activation ───
@@ -440,6 +461,15 @@ type Activation struct {
 	// and expiry cleanup keep their existing hard-delete behavior.
 	DeactivatedAt     *time.Time `json:"deactivated_at,omitempty"`
 	DeactivatedReason string     `bun:",notnull,default:''" json:"deactivated_reason,omitempty"`
+
+	// DevicePublicKey is the raw Ed25519 public key (base64) the SDK
+	// generated on this device at activation time. Empty for legacy
+	// activations. When set, security-event reports from this device
+	// must be signed with the matching private key, so holding a
+	// leaked license key is not enough to file evidence against the
+	// licence. The private half never reaches the server.
+	DevicePublicKey string `bun:",notnull,default:''" json:"-"`
+	DeviceKeyAlg    string `bun:",notnull,default:''" json:"-"`
 
 	License *License `bun:"rel:belongs-to,join:license_id=id" json:"license,omitempty"`
 }

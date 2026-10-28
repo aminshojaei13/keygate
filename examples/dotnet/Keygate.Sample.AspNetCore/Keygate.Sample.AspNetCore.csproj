@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Keygate.Sample.AspNetCore</AssemblyName>
+    <RootNamespace>Keygate.Sample.AspNetCore</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../sdk/dotnet/Keygate.Protection.AspNetCore/Keygate.Protection.AspNetCore.csproj" />
+  </ItemGroup>
+
+</Project>

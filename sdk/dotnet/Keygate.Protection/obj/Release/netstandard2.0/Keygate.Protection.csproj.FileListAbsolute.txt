@@ -1,0 +1,13 @@
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/obj/Release/netstandard2.0/Keygate.Protection.csproj.AssemblyReference.cache
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/obj/Release/netstandard2.0/Keygate.Protection.GeneratedMSBuildEditorConfig.editorconfig
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/obj/Release/netstandard2.0/Keygate.Protection.AssemblyInfoInputs.cache
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/obj/Release/netstandard2.0/Keygate.Protection.AssemblyInfo.cs
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/obj/Release/netstandard2.0/Keygate.Protection.csproj.CoreCompileInputs.cache
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/obj/Release/netstandard2.0/Keygate.Protection.sourcelink.json
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/bin/Release/netstandard2.0/Keygate.Protection.deps.json
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/bin/Release/netstandard2.0/Keygate.Protection.dll
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/bin/Release/netstandard2.0/Keygate.Protection.pdb
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/bin/Release/netstandard2.0/Keygate.Protection.xml
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/obj/Release/netstandard2.0/Keygate.Protection.dll
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/obj/Release/netstandard2.0/Keygate.Protection.xml
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection/obj/Release/netstandard2.0/Keygate.Protection.pdb

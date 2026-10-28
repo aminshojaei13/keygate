@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "Bg5RokcgAW4rTZNvk2GJg/402S54wPbWjClD0MTehtM=",
+  "Source": "Keygate.Sample.AspNetCore",
+  "BasePath": "_content/Keygate.Sample.AspNetCore",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

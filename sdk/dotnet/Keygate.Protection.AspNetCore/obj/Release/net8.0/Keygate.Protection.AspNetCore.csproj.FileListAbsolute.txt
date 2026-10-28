@@ -1,0 +1,17 @@
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/bin/Release/net8.0/Keygate.Protection.AspNetCore.deps.json
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/bin/Release/net8.0/Keygate.Protection.AspNetCore.dll
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/bin/Release/net8.0/Keygate.Protection.AspNetCore.pdb
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/bin/Release/net8.0/Keygate.Protection.dll
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/bin/Release/net8.0/Keygate.Protection.pdb
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/bin/Release/net8.0/Keygate.Protection.xml
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/Keygate.Protection.AspNetCore.csproj.AssemblyReference.cache
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/Keygate.Protection.AspNetCore.GeneratedMSBuildEditorConfig.editorconfig
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/Keygate.Protection.AspNetCore.AssemblyInfoInputs.cache
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/Keygate.Protection.AspNetCore.AssemblyInfo.cs
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/Keygate.Protection.AspNetCore.csproj.CoreCompileInputs.cache
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/Keygate.Protection.AspNetCore.sourcelink.json
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/Keygate..1D10AEA9.Up2Date
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/Keygate.Protection.AspNetCore.dll
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/refint/Keygate.Protection.AspNetCore.dll
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/Keygate.Protection.AspNetCore.pdb
+/Users/aminshojaei/AndroidStudioProjects/keygate/sdk/dotnet/Keygate.Protection.AspNetCore/obj/Release/net8.0/ref/Keygate.Protection.AspNetCore.dll

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>Keygate.Protection</AssemblyName>
+    <RootNamespace>Keygate.Protection</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Description>Keygate license protection SDK: device binding, signed offline licenses, file integrity and tamper reporting.</Description>
+    <PackageId>Keygate.Protection</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Keygate</Authors>
+    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pure-managed Ed25519; supports netstandard2.0, so the SDK runs on
+         .NET Core 3.1, .NET 5+ and .NET Framework 4.6.2+. -->
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" />
+    <!-- DPAPI on Windows. The package is a no-op on other platforms; the
+         file store falls back to mode-0600 files there. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <!-- Registry access for the Windows MachineGuid on netstandard2.0. -->
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+</Project>
